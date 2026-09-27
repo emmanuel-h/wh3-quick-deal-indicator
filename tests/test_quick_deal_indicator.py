@@ -283,6 +283,21 @@ class RobustnessTests(ModTestCase):
         self.load_mod()
         self.assertFalse(Path("quick_deal_indicator_debug.txt").exists())
 
+    def test_no_hud_switch_scans_but_leaves_hud_untouched(self):
+        Path("quick_deal_indicator_debug.txt").write_text("")
+        Path("quick_deal_indicator_no_hud.txt").write_text("")
+        self.mock.diplomacy_button.tooltip = VANILLA_TOOLTIP
+        self.set_factions({"jade": {TRADE: (1.0, True)}})
+        self.load_mod()
+        self.hover()
+        self.turn_start("player")
+        self.panel_closed("diplomacy_dropdown")
+        self.assertEqual(len(self.mock.diplomacy_button.children), 0)
+        self.assertEqual(self.tooltip(), VANILLA_TOOLTIP)
+        content = Path("quick_deal_indicator_debug.txt").read_text()
+        self.assertIn("HUD disabled", content)
+        self.assertEqual(content.count("1 deal(s) with 1 faction(s)"), 3)
+
     def test_debug_file_receives_log_when_present(self):
         Path("quick_deal_indicator_debug.txt").write_text("")
         self.set_factions({"jade": {TRADE: (1.0, True)}})

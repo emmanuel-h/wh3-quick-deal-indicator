@@ -35,17 +35,27 @@ local OPTIONS = {
 	"diplomatic_option_confederation",
 }
 
--- Debug logging to a file is opt-in: create an empty quick_deal_indicator_debug.txt
--- in the game folder and the mod appends its log to it.
+-- Debug switches: empty files in the game folder, checked once when the script loads.
+--   quick_deal_indicator_debug.txt  - the mod appends its log to this file.
+--   quick_deal_indicator_no_hud.txt - scan and log only, never touch the HUD
+--                                     (to rule the badge/tooltip in or out of a problem).
 local DEBUG_FILE = "quick_deal_indicator_debug.txt"
-local debug_enabled = false
-pcall(function()
-	local f = io.open(DEBUG_FILE, "r")
-	if f then
-		f:close()
-		debug_enabled = true
-	end
-end)
+local NO_HUD_FILE = "quick_deal_indicator_no_hud.txt"
+
+local function file_exists(name)
+	local ok, exists = pcall(function()
+		local f = io.open(name, "r")
+		if f then
+			f:close()
+			return true
+		end
+		return false
+	end)
+	return ok and exists
+end
+
+local debug_enabled = file_exists(DEBUG_FILE)
+local hud_enabled = not file_exists(NO_HUD_FILE)
 
 local function log(msg)
 	msg = LOG_PREFIX .. tostring(msg)
@@ -145,6 +155,9 @@ local function refresh(reason)
 			log(string.format("  %s %s %.1f", deal.faction:name(), deal.option, deal.score))
 		end
 
+		if not hud_enabled then
+			return
+		end
 		local button = diplomacy_button()
 		if not button then
 			log("diplomacy button not found, HUD not updated")
@@ -160,6 +173,8 @@ local function refresh(reason)
 end
 
 local function init()
+	log("init, HUD " .. (hud_enabled and "enabled" or "disabled (" .. NO_HUD_FILE .. ")"))
+
 	-- Loading a save mid-turn: show the current state straight away.
 	refresh("campaign loaded")
 
@@ -193,7 +208,7 @@ local function init()
 		"qdi_diplomacy_button_hover",
 		"ComponentMouseOn",
 		function(context)
-			return context.string == "button_diplomacy"
+			return hud_enabled and context.string == "button_diplomacy"
 		end,
 		function()
 			local button = diplomacy_button()

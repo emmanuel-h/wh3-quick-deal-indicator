@@ -161,6 +161,8 @@ cp build/quick_deal_probe.pack "$GAME/data/"
 - `$GAME/quick_deal_indicator_debug.txt` — create this empty file to turn on the mod's
   debug log. Each refresh appends its reason and every deal found. Delete it to turn
   logging off.
+- `$GAME/quick_deal_indicator_no_hud.txt` — create this empty file to make the mod scan
+  and log without touching the HUD, to tell HUD problems from scan problems.
 - The same messages also go to the standard script log through `out()`, prefixed `[QDI]`.
 
 ### Testing checklist

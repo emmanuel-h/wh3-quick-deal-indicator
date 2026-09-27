@@ -104,6 +104,19 @@ What you'll see:
 
 Delete the file when you're done to turn logging off.
 
+### 2.2b Switch off the HUD part — `GAME\quick_deal_indicator_no_hud.txt`
+
+If the problem only happens with the mod, find out whether it comes from the HUD part
+(badge and tooltip) or from the scan. Create an empty file named
+`quick_deal_indicator_no_hud.txt` in GAME, the same way as in 2.2. With it, the mod
+still scans and logs (its log starts with `init, HUD disabled`) but never touches the
+HUD. Reproduce the problem again:
+
+- The problem is gone → it comes from the badge/tooltip.
+- The problem is still there → it comes from the scan (or isn't the mod: check section 1).
+
+Delete the file afterwards to get the badge back.
+
 ### 2.3 Crash files
 
 After a crash (desktop, error window, or the game just closes):
