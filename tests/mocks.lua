@@ -10,6 +10,8 @@ mock = {
 	listeners = {},
 	first_tick = {},
 	real_callbacks = {},
+	repeat_callbacks = {},
+	quick_deal_ready = true,  -- false: the Quick Deal button isn't built yet
 	local_faction = "player",
 	multiplayer = false,
 	factions = {},   -- name -> { dead = bool, scores = { option = { score, can_issue } } }
@@ -155,7 +157,7 @@ function find_uicomponent(parent, ...)
 	if path_is(path, { "faction_buttons_docker", "button_diplomacy" }) then
 		return mock.diplomacy_button
 	end
-	if mock.diplomacy_open and path_is(path, { "diplomacy_dropdown", "faction_panel", "faction_panel_bottom", "buttons_bl", "button_quick_deal" }) then
+	if mock.diplomacy_open and mock.quick_deal_ready and path_is(path, { "diplomacy_dropdown", "faction_panel", "faction_panel_bottom", "buttons_bl", "button_quick_deal" }) then
 		return mock.quick_deal_button
 	end
 	return false
@@ -187,8 +189,17 @@ cm = strict("cm", {
 		table.insert(mock.real_callbacks, { f = f, ms = ms, name = name })
 	end,
 	repeat_real_callback = function(_, f, ms, name)
-		mock.repeat_callbacks = mock.repeat_callbacks or {}
 		table.insert(mock.repeat_callbacks, { f = f, ms = ms, name = name })
+	end,
+	remove_real_callback = function(_, name)
+		for _, cb in ipairs(mock.repeat_callbacks) do
+			if cb.name == name then cb.removed = true end
+		end
+		local kept = {}
+		for _, cb in ipairs(mock.real_callbacks) do
+			if cb.name ~= name then table.insert(kept, cb) end
+		end
+		mock.real_callbacks = kept
 	end,
 })
 
@@ -231,21 +242,34 @@ function mock.fire(event, context)
 	end
 end
 
--- Lets time pass: runs pending real callbacks whose delay is <= max_ms (all when
--- omitted), including callbacks those schedule in turn, until none is due.
+-- Lets time pass: runs pending one-shot real callbacks whose delay is <= max_ms (all
+-- when omitted), including callbacks those schedule in turn, and each repeating
+-- callback whose interval is <= max_ms once per round, until nothing is due (at most
+-- 1000 rounds, so a poll that never finishes can't hang the tests).
 function mock.run_real_callbacks(max_ms)
-	local ran = true
-	while ran do
-		ran = false
+	local function due(cb)
+		return max_ms == nil or cb.ms <= max_ms
+	end
+	for _ = 1, 1000 do
+		local ran = false
 		local pending = mock.real_callbacks
 		mock.real_callbacks = {}
 		for _, cb in ipairs(pending) do
-			if max_ms == nil or cb.ms <= max_ms then
+			if due(cb) then
 				cb.f()
 				ran = true
 			else
 				table.insert(mock.real_callbacks, cb)
 			end
+		end
+		for _, cb in ipairs(mock.repeat_callbacks) do
+			if due(cb) and not cb.removed and cb.name ~= "qdi_heartbeat" then
+				cb.f()
+				ran = true
+			end
+		end
+		if not ran then
+			return
 		end
 	end
 end

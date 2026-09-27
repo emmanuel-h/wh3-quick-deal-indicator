@@ -87,22 +87,27 @@ score is ≥ 0.
   button. On `ComponentLClickUp` the mod rescans and notes the first deal type (in the
   screen's button order: non-aggression pact, trade agreement, military access,
   defensive alliance, military alliance, peace, then vassal / tributary / confederation)
-  that has a deal ≥ 0. Then, each step from a real (UI) timer and never inside a UI
-  event:
-  1. next UI update: click the diplomacy button (`SimulateLClick`);
-  2. 300 ms after that click has returned: if `diplomacy_dropdown` exists, press
-     `diplomacy_dropdown > faction_panel > faction_panel_bottom > buttons_bl >
-     button_quick_deal` unless that toggle is already selected;
-  3. 300 ms later: select the deal type among the children of
-     `diplomacy_dropdown > faction_panel > list_quick_deal_buttons`. The game creates
-     those buttons with the option key as id (seen in-game:
-     `diplomatic_option_nonaggression_pact`), so the mod finds the one named after the
-     option and reads only its state. If it isn't there, the game's selection is kept.
+  that has a deal ≥ 0. Then:
+  1. on the next UI update (a real timer, not inside the badge's UI event), click the
+     diplomacy button (`SimulateLClick`);
+  2. once that click has returned, a check runs every 50 ms (`repeat_real_callback`)
+     and acts only when what it needs exists — no fixed delay, so a slow machine just
+     waits longer:
+     - when `diplomacy_dropdown` and its `faction_panel > faction_panel_bottom >
+       buttons_bl > button_quick_deal` exist: press it, unless already selected;
+     - when `faction_panel > list_quick_deal_buttons` contains the button named after
+       the option (the game uses the option key as id, e.g.
+       `diplomatic_option_nonaggression_pact`): select it, unless already selected.
+       Only ids and states are read.
+  3. The check stops when done, or after 10 s without the next thing appearing (e.g. the
+     diplomacy button is disabled); at the deal-type stage it then logs the button ids
+     it found.
 
-  Each step belongs to one click (`click_flow_id`); a newer click makes older pending
-  steps skip. Nothing listens to `PanelOpenedCampaign`, so opening diplomacy manually is
-  never affected. See [Known crashes](#known-crashes) §3 for why the flow is built this
-  way.
+  The mod's own simulated clicks run with a `simulating_click` guard: the game fires
+  events and runs due timers inside `SimulateLClick`, and the check does nothing while
+  the guard is set. A newer badge click replaces a flow in progress. Nothing listens to
+  `PanelOpenedCampaign`, so opening diplomacy manually is never affected. See
+  [Known crashes](#known-crashes) §3 for why the flow is built this way.
 
 ### Known crashes
 
@@ -158,10 +163,11 @@ timers, so the Quick Deal step (scheduled from that event) ran re-entrantly on t
 half-built panel and never came back. Heartbeats stopped and event listeners died (the
 badge stopped reacting to clicks).
 
-Fix: nothing reacts to `PanelOpenedCampaign` any more. Each step is scheduled from a
-timer only after the previous simulated click has returned, with 300 ms between steps
-(see the Click description above). A test simulates the game running timers inside the
-click and checks no step runs there.
+Fix: nothing reacts to `PanelOpenedCampaign` any more. After the diplomacy click has
+returned, a check waits for each panel/button to exist (no fixed delays, so it doesn't
+depend on the machine's speed), and is inert while one of the mod's own clicks is in
+progress (see the Click description above). Tests simulate the game running timers
+inside the clicks and check nothing runs there.
 
 Also seen in-game: a deal-type button whose state was logged as `selected` didn't match
 the Lua pattern `^selected`, so it was clicked again. States are now checked with a
@@ -279,9 +285,10 @@ create the debug file, then:
 4. **Badge click** — click the badge: diplomacy opens on the Known Factions list with the
    Deal chance column (Quick Deal enabled), with the first deal type that has a deal ≥ 0
    selected. The log shows `badge clicked, first deal type: ...`,
-   `clicking diplomacy button`, `diplomacy button clicked`, `quick deal step`,
-   `quick deal view enabled`, `deal type step`, then `deal type ... selected` (or
-   `already selected`).
+   `clicking diplomacy button`, `diplomacy button clicked`,
+   `quick deal button ready after N ms`, `quick deal button ... clicked`,
+   `deal type button ready after N ms`, `deal type ... clicked` (or `already selected`),
+   then `click flow finished: done`.
    Repeat with other panels open first (a settlement, an army's units, recruitment,
    technologies), and check the `heartbeat` lines keep coming afterwards. Clicking the diplomacy button outside the badge opens
    diplomacy normally.

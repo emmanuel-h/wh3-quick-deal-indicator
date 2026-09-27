@@ -17,9 +17,12 @@ local BADGE_NAME = "quick_deal_indicator_badge"
 local BADGE_LAYOUT = "ui/quick_deal_indicator/badge.twui.xml"
 local QUICK_DEAL_BUTTON_PATH = { DIPLOMACY_PANEL, "faction_panel", "faction_panel_bottom", "buttons_bl", "button_quick_deal" }
 local DEAL_TYPE_LIST_PATH = { DIPLOMACY_PANEL, "faction_panel", "list_quick_deal_buttons" }
--- Delay between the steps of the badge click flow, so each simulated click has fully
--- returned and the panel it opens is built before the next step looks for it.
-local CLICK_STEP_DELAY_MS = 300
+-- The badge click flow waits for conditions (panel opened, button present), checked
+-- on a UI timer. The interval is only how often it looks; the timeout only stops the
+-- check if the diplomacy screen never shows up (e.g. the button is disabled).
+local FLOW_POLL_MS = 50
+local FLOW_TIMEOUT_MS = 10000
+local FLOW_POLL_NAME = "qdi_flow_poll"
 
 -- Game events after which deals are re-checked (during the local player's turn),
 -- in addition to turn start and any panel closing.
@@ -38,9 +41,12 @@ local LOC_QUICK_DEAL = "uied_component_texts_localised_string_dy_province_owned_
 local LOC_OPTION_PREFIX = "diplomacy_quick_deal_offers_localised_quick_deal_title_"
 local LOC_FACTION_PREFIX = "factions_screen_name_"
 
--- Incremented on each badge click; a step of the click flow only acts if it still
--- belongs to the latest click.
-local click_flow_id = 0
+-- Badge click flow in progress (nil when idle):
+-- { stage = "quick deal" | "deal type", option = string|nil, waited_ms = number }
+local flow = nil
+-- True while the mod's own SimulateLClick is running. The game fires events and runs
+-- due timers inside it; nothing of the flow may run then (see README, Known crashes).
+local simulating_click = false
 -- A refresh is already scheduled.
 local refresh_pending = false
 
@@ -179,6 +185,20 @@ local function first_available_option(deals)
 	return nil
 end
 
+--- Clicks a component with the re-entrancy guard set.
+local function simulate_click(uic, what)
+	log("clicking " .. what)
+	simulating_click = true
+	local ok, err = pcall(function()
+		uic:SimulateLClick()
+	end)
+	simulating_click = false
+	if not ok then
+		error(err, 0)
+	end
+	log(what .. " clicked")
+end
+
 --- Selects the deal-type button for `option` under the Known Factions list.
 -- The game creates these buttons with the option key as id (seen in-game, e.g.
 -- "diplomatic_option_nonaggression_pact"). Only ids and states are read: reading
@@ -199,79 +219,98 @@ local function select_deal_type(option)
 		log(string.format("deal type %s already selected (%q)", option, tostring(state)))
 		return
 	end
-	log(string.format("clicking deal type %s (was %q)", option, tostring(state)))
-	button:SimulateLClick()
-	log("deal type " .. option .. " selected")
+	simulate_click(button, string.format("deal type %s (was %q)", option, tostring(state)))
 end
 
---- Presses the diplomacy screen's Quick Deal button unless it is already on.
-local function enable_quick_deal_view()
-	local button = find_uicomponent(core:get_ui_root(), unpack(QUICK_DEAL_BUTTON_PATH))
-	if not button then
-		log("quick deal button not found")
-		return
-	end
-	local state = button:CurrentState()
-	if is_selected(state) then
-		log(string.format("quick deal view already enabled (%q)", tostring(state)))
-		return
-	end
-	log(string.format("clicking quick deal button (was %q)", tostring(state)))
-	button:SimulateLClick()
-	log("quick deal view enabled")
+local function stop_flow(reason)
+	log("click flow finished: " .. reason)
+	flow = nil
+	cm:remove_real_callback(FLOW_POLL_NAME)
 end
 
---- Runs `step` after CLICK_STEP_DELAY_MS if no newer badge click happened meanwhile.
-local function after_delay(flow_id, name, step)
-	cm:real_callback(function()
-		if flow_id ~= click_flow_id then
-			log(name .. ": superseded by a newer click, skipped")
+--- One check of the click flow: acts only once what the current stage needs exists.
+local function poll_flow()
+	if not flow or simulating_click then
+		return
+	end
+	flow.waited_ms = flow.waited_ms + FLOW_POLL_MS
+	if flow.waited_ms > FLOW_TIMEOUT_MS then
+		if flow.stage == "deal type" then
+			-- Ids only: reading tooltips of game components is avoided (see README).
+			local list = find_uicomponent(core:get_ui_root(), unpack(DEAL_TYPE_LIST_PATH))
+			local ids = {}
+			for i = 0, (list and list:ChildCount() or 0) - 1 do
+				table.insert(ids, UIComponent(list:Find(i)):Id())
+			end
+			log("no deal type button " .. flow.option .. "; buttons found: " .. table.concat(ids, ", "))
+		end
+		stop_flow("gave up waiting at stage '" .. flow.stage .. "'")
+		return
+	end
+
+	local root = core:get_ui_root()
+	if flow.stage == "quick deal" then
+		if not find_uicomponent(root, DIPLOMACY_PANEL) then
 			return
 		end
-		log(name)
-		local ok, err = pcall(step)
-		if not ok then
-			log("ERROR in " .. name .. ": " .. tostring(err))
+		local button = find_uicomponent(root, unpack(QUICK_DEAL_BUTTON_PATH))
+		if not button then
+			return
 		end
-	end, CLICK_STEP_DELAY_MS, "qdi_" .. name:gsub(" ", "_"))
+		log(string.format("quick deal button ready after %d ms", flow.waited_ms))
+		local state = button:CurrentState()
+		if is_selected(state) then
+			log(string.format("quick deal view already enabled (%q)", tostring(state)))
+		else
+			simulate_click(button, string.format("quick deal button (was %q)", tostring(state)))
+		end
+		if not flow.option then
+			stop_flow("no deal type to select")
+			return
+		end
+		flow.stage = "deal type"
+		flow.waited_ms = 0
+	elseif flow.stage == "deal type" then
+		local list = find_uicomponent(root, unpack(DEAL_TYPE_LIST_PATH))
+		if not list or not find_uicomponent(list, flow.option) then
+			return
+		end
+		log(string.format("deal type button ready after %d ms", flow.waited_ms))
+		select_deal_type(flow.option)
+		stop_flow("done")
+	end
 end
 
 --- Badge click: open diplomacy, then the Quick Deal view, then the deal type.
--- Every step runs from a timer, never inside a UI event, and is only scheduled once
--- the previous simulated click has returned: reacting to PanelOpenedCampaign (which
--- fires inside SimulateLClick) ran our next step re-entrantly on a half-built panel,
--- stalled the script and crashed the game.
+-- The diplomacy click runs from a timer (never inside the badge's UI event); the next
+-- stages run from a poll that starts once that click has returned and waits for each
+-- panel/button to exist, whatever the machine's speed.
 local function start_click_flow()
-	click_flow_id = click_flow_id + 1
-	local flow_id = click_flow_id
 	local option = first_available_option((scan()))
 	log("badge clicked, first deal type: " .. tostring(option))
+	if flow then
+		stop_flow("superseded by a newer click")
+	end
+	flow = { stage = "quick deal", option = option, waited_ms = 0 }
+	local this_flow = flow
 
 	cm:real_callback(function()
-		if flow_id ~= click_flow_id then
+		if flow ~= this_flow then
 			return
 		end
-		local ok, err = pcall(function()
-			log("clicking diplomacy button")
-			diplomacy_button():SimulateLClick()
-			log("diplomacy button clicked")
-		end)
+		local ok, err = pcall(simulate_click, diplomacy_button(), "diplomacy button")
 		if not ok then
 			log("ERROR clicking diplomacy button: " .. tostring(err))
+			stop_flow("error")
 			return
 		end
-		after_delay(flow_id, "quick deal step", function()
-			if not find_uicomponent(core:get_ui_root(), DIPLOMACY_PANEL) then
-				log("diplomacy panel not open, stopping")
-				return
+		cm:repeat_real_callback(function()
+			local ok_poll, err_poll = pcall(poll_flow)
+			if not ok_poll then
+				log("ERROR in click flow: " .. tostring(err_poll))
+				stop_flow("error")
 			end
-			enable_quick_deal_view()
-			if option then
-				after_delay(flow_id, "deal type step", function()
-					select_deal_type(option)
-				end)
-			end
-		end)
+		end, FLOW_POLL_MS, FLOW_POLL_NAME)
 	end, 0, "qdi_open_diplomacy")
 end
 

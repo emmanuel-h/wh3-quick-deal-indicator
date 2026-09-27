@@ -243,6 +243,7 @@ To uninstall completely: untick it in the launcher and delete
 | Quick Deal view opens on the wrong deal type | The game renamed its deal-type buttons | The log shows `no deal type button ...`. Report it with that part of the log |
 | Badge stays brighter / looks different after clicking | Shouldn't happen any more (it had a hover state once) | Report it with a screenshot |
 | Badge not updated after moving an army or a battle | Refreshes only happen on your own turn, 250 ms after the event | Check the log for `refresh (CharacterFinishedMovingEvent)` etc. Open and close any panel to force a refresh |
+| Log says `click flow finished: gave up waiting at stage '...'` | The diplomacy screen or a button never appeared within 10 s (diplomacy button disabled, or the game changed its screen) | At the `deal type` stage the line before lists the button ids found; report it with that part of the log |
 | Diplomacy opens but not on the Quick Deal view | The diplomacy screen layout changed | The log shows `quick deal button not found`; report it |
 | `diplomacy button not found` in the log | Game patch or another HUD mod changed the HUD | Try without other UI mods; report it |
 | `ERROR during refresh` in the log | Game patch changed a function the mod uses | Report it with the log |

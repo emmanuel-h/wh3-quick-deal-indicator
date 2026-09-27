@@ -283,31 +283,70 @@ class BadgeClickTests(ModTestCase):
         self.mock.run_real_callbacks()
         self.assertEqual(self.mock.quick_deal_button.clicks, 0)
 
-    def test_stops_if_diplomacy_does_not_open(self):
+    def test_gives_up_if_diplomacy_does_not_open(self):
         self.mock.diplomacy_button.on_click = None  # button disabled: nothing opens
         self.click()
         self.mock.run_real_callbacks()
         self.assertEqual(self.mock.quick_deal_button.clicks, 0)
-        self.assertIn("[QDI] diplomacy panel not open, stopping", self.logs())
+        self.assertIn("[QDI] click flow finished: gave up waiting at stage 'quick deal'", self.logs())
+        self.assertEqual(self.active_polls(), [])
         self.assertNoErrors()
 
-    def test_newer_click_supersedes_pending_steps(self):
+    def test_waits_as_long_as_the_quick_deal_button_takes(self):
+        # A slow machine: the button appears only after many checks.
+        self.mock.quick_deal_ready = False
+        self.click()
+        self.mock.run_real_callbacks(0)
+        for _ in range(40):  # 40 checks of 50 ms: 2 s
+            self.run_one_poll()
+        self.assertEqual(self.mock.quick_deal_button.clicks, 0)
+        self.mock.quick_deal_ready = True
+        self.run_one_poll()
+        self.assertEqual(self.mock.quick_deal_button.clicks, 1)
+        self.assertIn("[QDI] quick deal button ready after 2050 ms", self.logs())
+
+    def test_no_check_runs_inside_the_mods_own_clicks(self):
+        # If the game runs the poll inside the Quick Deal click, a nested check must not
+        # click the toggle again (that would switch Quick Deal back off).
+        original = self.mock.quick_deal_button.on_click
+
+        def click_quick_deal(button):
+            self.run_one_poll()  # the game runs timers during the click, before the state changes
+            original(button)
+
+        self.mock.quick_deal_button.on_click = click_quick_deal
+        self.click()
+        self.mock.run_real_callbacks()
+        self.assertEqual(self.mock.quick_deal_button.clicks, 1)
+        self.assertEqual(self.mock.quick_deal_button.state, "selected")
+        self.assertNoErrors()
+
+    def test_poll_stops_once_done(self):
+        self.click()
+        self.mock.run_real_callbacks()
+        self.assertEqual(self.active_polls(), [])
+
+    def active_polls(self):
+        return [cb.name for cb in self.mock.repeat_callbacks.values() if not cb.removed]
+
+    def run_one_poll(self):
+        for cb in self.mock.repeat_callbacks.values():
+            if cb.name == "qdi_flow_poll" and not cb.removed:
+                cb.f()
+
+    def test_newer_click_supersedes_the_pending_flow(self):
         self.click()
         self.mock.run_real_callbacks(0)
         self.click()
         self.mock.run_real_callbacks()
         self.assertEqual(self.mock.quick_deal_button.clicks, 1)
-        self.assertIn("[QDI] quick deal step: superseded by a newer click, skipped", self.logs())
+        self.assertIn("[QDI] click flow finished: superseded by a newer click", self.logs())
 
-    def test_missing_quick_deal_button_is_logged(self):
-        def open_panel_without_buttons(*_):
-            self.fire('{ string = "diplomacy_dropdown" }', "PanelOpenedCampaign")
-
-        self.mock.diplomacy_button.on_click = open_panel_without_buttons
-        self.mock.diplomacy_open = False
+    def test_missing_quick_deal_button_gives_up_cleanly(self):
+        self.mock.quick_deal_ready = False  # never built
         self.click()
         self.mock.run_real_callbacks()
-        self.assertIn("[QDI] diplomacy panel not open, stopping", self.logs())
+        self.assertIn("[QDI] click flow finished: gave up waiting at stage 'quick deal'", self.logs())
         self.assertNoErrors()
 
     def test_other_component_clicks_are_ignored(self):
@@ -470,8 +509,7 @@ class DealTypeSelectionTests(ModTestCase):
         other = self.mock.add_deal_type_button("mystery", "Something")
         self.click_and_settle()
         self.assertEqual(other.clicks, 0)
-        self.assertIn("[QDI] no deal type button " + TRADE + " (1 buttons), keeping the game's selection",
-                      self.logs())
+        self.assertIn("[QDI] no deal type button " + TRADE + "; buttons found: mystery", self.logs())
         self.assertNoErrors()
 
     def test_game_button_tooltips_are_never_read(self):
