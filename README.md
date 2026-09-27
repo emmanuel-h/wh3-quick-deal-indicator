@@ -18,9 +18,9 @@ Several development builds crashed the game; see [Known crashes](#known-crashes)
 
 ## Installation
 
-1. Subscribe on the Steam Workshop (link once published), or download
-   `quick_deal_indicator.pack` from the [Releases](../../releases) page and copy it into
-   `<Steam>/steamapps/common/Total War WARHAMMER III/data/`.
+1. Subscribe on the [Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3809162317),
+   or download `quick_deal_indicator.pack` from the [Releases](../../releases) page and
+   copy it into `<Steam>/steamapps/common/Total War WARHAMMER III/data/`.
 2. Enable it in the game launcher's mod manager.
 
 The mod only reads game state and changes your own HUD, so it is save-game compatible
@@ -238,10 +238,12 @@ tests/
 ├── mocks.lua                 # Fakes of the game's scripting API (cm, core, UI, loc)
 └── test_quick_deal_indicator.py
 workshop/
-├── description.bbcode        # Steam Workshop description, ready to paste
+├── UPLOAD.md                 # how to publish a new version on the Workshop
+├── description.bbcode        # Steam Workshop description (sent on every upload)
 └── quick_deal_indicator.png  # 256x256 Workshop preview (same name as the pack)
 tools/
 ├── packtool.py               # list / extract / build PFH5 packs
+├── workshop_upload.py        # build + upload/update the Workshop item (workshopper)
 └── probe/                    # Debug mod: logs every Quick Deal score to a file
 ```
 
@@ -359,6 +361,21 @@ create the debug file, then:
 11. **Multiplayer** — play a few co-op turns with both players running the mod: no
    desync, and each player sees only their own deals.
 12. **No errors** in `lua_mod_log.txt`.
+
+## Releasing a new version
+
+1. Update `VERSION` in `mod/script/campaign/mod/quick_deal_indicator.lua` and, if the
+   features changed, `workshop/description.bbcode` and this README.
+2. Run the tests, build, and play-test the pack (see [Development](#development)).
+3. Commit, then create the GitHub release with the pack:
+
+   ```bash
+   python tools/packtool.py build mod build/quick_deal_indicator.pack
+   gh release create v1.0.1 build/quick_deal_indicator.pack --title "Quick Deal Indicator 1.0.1" --notes "..."
+   ```
+
+4. Update the Workshop item: `python tools/workshop_upload.py update "1.0.1: ..."`, see
+   [workshop/UPLOAD.md](workshop/UPLOAD.md).
 
 ## Something's wrong?
 
