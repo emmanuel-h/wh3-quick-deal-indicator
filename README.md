@@ -74,17 +74,22 @@ score is ≥ 0.
 
 - **Badge** — `ui/quick_deal_indicator/badge.twui.xml` is a copy of the vanilla missions
   counter (`hud_campaign.twui.xml > label_missions_count`) without its context callbacks.
-  It is created under `faction_buttons_docker > button_diplomacy` with
-  `core:get_or_create_component`, shows the number of **factions** with at least one
-  deal ≥ 0, and is hidden at 0.
+  It shows the number of **factions** with at least one deal ≥ 0, and is hidden at 0 or
+  when the diplomacy button itself is hidden. It is created with
+  `core:get_or_create_component` under `faction_buttons_docker`, *not* inside
+  `button_diplomacy`: that button's `StatePropagatorCallback` forces its own state on its
+  children, so the badge could never show its own hover state (it only lit up when the
+  button was hovered). Not under `button_group_management` either: its `RadialList`
+  layout would place the badge like another button. On every refresh the script moves
+  it over the button's bottom-right corner with the missions badge's geometry (42x41,
+  bottom-right at the button's corner + 23,13), from the button's `Position()` and
+  `Dimensions()` — the button's place depends on the faction's other HUD buttons.
 - **Hover** — the badge's states use vanilla button names: `active`, `down_off` and
   `inactive` (normal) and `hover` and `down` (the vanilla badge image brightened,
   `ui/quick_deal_indicator/badge_hover.png`, with white text), and its layout has the
   vanilla `Button` callback, as in `templates/round_extra_small_button.twui.xml`. With
   both, the engine switches the states by itself on mouse over and click; no script is
-  involved (the game sends no `ComponentMouseOn`/`Off` for the badge). Without the
-  `Button` callback the badge only lit up when hovering the diplomacy button, whose
-  `StatePropagatorCallback` copies its state to its children. The count is set on every state
+  involved (the game sends no `ComponentMouseOn`/`Off` for the badge). The count is set on every state
   (`SetStateText` only changes the current one), then the badge is put back to
   `active`.
 - **Tooltip** — set on the badge itself (our component has no context callbacks):
