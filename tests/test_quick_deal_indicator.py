@@ -349,6 +349,18 @@ class RefreshTests(ModTestCase):
         self.mock.run_real_callbacks()
         self.assertEqual(self.refresh_count() - before, 1)
 
+    def test_events_are_logged_with_their_outcome(self):
+        self.fire("{}", "BattleCompleted")
+        self.fire("{}", "RegionFactionChangeEvent")
+        self.mock.run_real_callbacks()
+        self.mock.my_turn = False
+        self.fire("{}", "CharacterFinishedMovingEvent")
+        logs = self.logs()
+        self.assertIn("[QDI] event BattleCompleted: refresh scheduled", logs)
+        self.assertIn("[QDI] event RegionFactionChangeEvent: refresh already scheduled", logs)
+        self.assertIn("[QDI] refresh (BattleCompleted): 1 deal(s) with 1 faction(s)", logs)
+        self.assertIn("[QDI] event CharacterFinishedMovingEvent: not the local player's turn, skipped", logs)
+
     def refresh_count(self):
         return sum(1 for line in self.logs() if line.startswith("[QDI] refresh ("))
 
@@ -389,6 +401,30 @@ class DealTypeSelectionTests(ModTestCase):
         buttons[TRADE].state = "selected_hover"
         self.click_and_settle()
         self.assertEqual(buttons[TRADE].clicks, 0)
+
+    # In-game, a state logged as "selected" didn't match the pattern "^selected".
+    def assert_not_clicked_when_state_is(self, state):
+        self.set_factions({"jade": {TRADE: (1.0, True)}})
+        self.load_mod()
+        buttons = self.add_buttons_by_id()
+        buttons[TRADE].state = state
+        self.click_and_settle()
+        self.assertEqual(buttons[TRADE].clicks, 0)
+
+    def test_selected_state_plain(self):
+        self.assert_not_clicked_when_state_is("selected")
+
+    def test_selected_state_with_leading_space(self):
+        self.assert_not_clicked_when_state_is(" selected")
+
+    def test_selected_state_capitalised(self):
+        self.assert_not_clicked_when_state_is("Selected")
+
+    def test_selected_state_variant(self):
+        self.assert_not_clicked_when_state_is("selected_hover")
+
+    def test_selected_state_with_trailing_nul(self):
+        self.assert_not_clicked_when_state_is("selected\x00")
 
     def test_waits_for_the_list_to_be_built(self):
         self.set_factions({"jade": {TRADE: (1.0, True)}})

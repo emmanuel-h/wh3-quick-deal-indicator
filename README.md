@@ -9,11 +9,12 @@ has an acceptable deal. The count is kept up to date as you play.
 
 ## Status
 
-🚧 Work in progress. Validated in-game: detection, the badge, its tooltip, and opening
-diplomacy on the Quick Deal view by clicking it, with no crash over a 10-minute session.
-Implemented, awaiting in-game testing: refresh after game events, selecting the first
-deal type (by id). Still to test: turn start, French, multiplayer. A hover highlight is
-postponed. Two builds crashed the game; see [Known crashes](#known-crashes).
+🚧 Work in progress. Validated in-game, with no crash over 10-minute sessions: detection,
+the badge and its tooltip, clicking it to open diplomacy on the Quick Deal view with the
+first available deal type selected, and refreshing when a panel closes. Awaiting
+in-game confirmation: refresh after army moves and other game events. Still to test:
+turn start, French, multiplayer. A hover highlight is postponed. Two builds crashed the
+game; see [Known crashes](#known-crashes).
 
 ## Installation
 
@@ -127,8 +128,14 @@ A build added three things at once: a second `hover` state on the badge (switche
 
 The next build removed the `hover` state and all tooltip reads on game components
 (buttons are found by id, which the log showed to be the option key), and kept the event
-refresh. The mocks reject `GetTooltipText` on game deal-type buttons. Which of the two
-removed parts caused the crash isn't established.
+refresh. The mocks reject `GetTooltipText` on game deal-type buttons. That build ran
+10 minutes without crashing (badge click, deal-type selection, army clicks and moves),
+so the cause was one of the two removed parts; which one isn't established.
+
+Also seen in-game: a deal-type button whose state was logged as `selected` didn't match
+the Lua pattern `^selected`, so it was clicked again. States are now checked with a
+tolerant `is_selected()` (case-insensitive, anywhere in the string) and logged with
+`%q` to reveal hidden characters.
 
 ## Repository layout
 
@@ -244,7 +251,8 @@ create the debug file, then:
    `quick deal view enabled`, then `deal type ... selected` (or `already selected`). Clicking the diplomacy button outside the badge opens
    diplomacy normally.
 5. **Live refresh** — move an army, win a battle, or open and close any panel: the log
-   shows a `refresh (...)` block named after the event, and the badge follows.
+   shows `event <name>: refresh scheduled` (or why it was skipped), then a
+   `refresh (<name>)` block, and the badge follows.
 6. **Stability** — play normally for at least 10 minutes: hover the diplomacy button,
    click armies and settlements, open and close panels. No crash.
 7. **Refresh on close** — sign one of the listed deals, close diplomacy: the badge

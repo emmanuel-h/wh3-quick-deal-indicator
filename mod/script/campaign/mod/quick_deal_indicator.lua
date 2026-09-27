@@ -157,6 +157,12 @@ local function update_badge(button, deals, faction_count)
 	end
 end
 
+--- Whether a toggle button's state is one of its "selected*" states. Tolerant on purpose:
+-- in-game, a state logged as "selected" didn't match the pattern "^selected".
+local function is_selected(state)
+	return tostring(state):lower():find("selected", 1, true) ~= nil
+end
+
 --- First option, in the diplomacy screen's order, with at least one deal; nil if none.
 local function first_available_option(deals)
 	local available = {}
@@ -187,12 +193,12 @@ local function select_deal_type(option)
 		return
 	end
 	local state = button:CurrentState()
-	if state:find("^selected") then
-		log("deal type " .. option .. " already selected (" .. state .. ")")
+	if is_selected(state) then
+		log(string.format("deal type %s already selected (%q)", option, tostring(state)))
 		return
 	end
 	button:SimulateLClick()
-	log("deal type " .. option .. " selected (was " .. state .. ")")
+	log(string.format("deal type %s selected (was %q)", option, tostring(state)))
 end
 
 --- Presses the diplomacy screen's Quick Deal button unless it is already on, then
@@ -204,11 +210,11 @@ local function enable_quick_deal_view(option)
 		return
 	end
 	local state = button:CurrentState()
-	if state:find("^selected") then
-		log("quick deal view already enabled (" .. state .. ")")
+	if is_selected(state) then
+		log(string.format("quick deal view already enabled (%q)", tostring(state)))
 	else
 		button:SimulateLClick()
-		log("quick deal view enabled (was " .. state .. ")")
+		log(string.format("quick deal view enabled (was %q)", tostring(state)))
 	end
 	if option then
 		cm:real_callback(function()
@@ -248,9 +254,15 @@ end
 -- Events arriving together (e.g. a battle ending and a region changing hands)
 -- produce a single scan.
 local function schedule_refresh(reason)
-	if refresh_pending or not cm:is_local_players_turn(true) then
+	if not cm:is_local_players_turn(true) then
+		log("event " .. reason .. ": not the local player's turn, skipped")
 		return
 	end
+	if refresh_pending then
+		log("event " .. reason .. ": refresh already scheduled")
+		return
+	end
+	log("event " .. reason .. ": refresh scheduled")
 	refresh_pending = true
 	cm:real_callback(function()
 		refresh_pending = false
