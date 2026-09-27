@@ -76,7 +76,3 @@ Uploading subscribes you to the item, so Steam downloads it into
 `data\quick_deal_indicator.pack` exists too, the launcher can list the mod twice: keep
 only one ticked (the local one while developing, the Workshop one to check what players
 get).
-
-## History
-
-- 1.0.0 — first upload, 2026-09-27, created private.
