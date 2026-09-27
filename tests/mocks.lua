@@ -101,6 +101,7 @@ mock.quick_deal_button.on_click = function(c)
 	c.state = c.state:find("^selected") and "active" or "selected"
 end
 mock.diplomacy_open = false
+mock.diplomacy_panel = new_component("diplomacy_dropdown")
 
 -- Deal-type buttons under the Known Factions list, created by the game.
 -- Tests fill it with mock.add_deal_type_button(id, tooltip).
@@ -144,6 +145,9 @@ function find_uicomponent(parent, ...)
 			if child.id == path[1] and #path == 1 then return child end
 		end
 		return false
+	end
+	if mock.diplomacy_open and path_is(path, { "diplomacy_dropdown" }) then
+		return mock.diplomacy_panel
 	end
 	if mock.diplomacy_open and path_is(path, { "diplomacy_dropdown", "faction_panel", "list_quick_deal_buttons" }) then
 		return mock.deal_type_list

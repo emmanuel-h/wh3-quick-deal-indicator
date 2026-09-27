@@ -242,14 +242,34 @@ class BadgeClickTests(ModTestCase):
 
     def test_click_opens_diplomacy_then_quick_deal_view(self):
         self.click()
-        # Nothing is clicked inside the UI click handler itself (crash in-game when
-        # that closed other panels during the event dispatch).
+        # Nothing is clicked inside the UI click handler itself.
         self.assertEqual(self.mock.diplomacy_button.clicks, 0)
-        self.assertEqual(self.mock.quick_deal_button.clicks, 0)
         self.mock.run_real_callbacks(0)
         self.assertEqual(self.mock.diplomacy_button.clicks, 1)
+        self.assertEqual(self.mock.quick_deal_button.clicks, 0, "must wait for the panel to build")
+        self.mock.run_real_callbacks(300)
         self.assertEqual(self.mock.quick_deal_button.clicks, 1)
         self.assertEqual(self.mock.quick_deal_button.state, "selected")
+        self.assertNoErrors()
+
+    def test_no_step_runs_inside_the_diplomacy_click(self):
+        # In-game, SimulateLClick fired PanelOpenedCampaign and ran due timers inside
+        # the click; a step reacting to that ran on a half-built panel and stalled.
+        steps_during_click = []
+
+        def click_diplomacy(*_):
+            self.mock.diplomacy_open = True
+            self.fire('{ string = "diplomacy_dropdown" }', "PanelOpenedCampaign")
+            before = self.mock.quick_deal_button.clicks
+            self.mock.run_real_callbacks(300)
+            steps_during_click.append(self.mock.quick_deal_button.clicks - before)
+
+        self.mock.diplomacy_button.on_click = click_diplomacy
+        self.click()
+        self.mock.run_real_callbacks(0)
+        self.assertEqual(steps_during_click, [0])
+        self.mock.run_real_callbacks(300)
+        self.assertEqual(self.mock.quick_deal_button.clicks, 1)
         self.assertNoErrors()
 
     def test_quick_deal_not_toggled_off_when_already_enabled(self):
@@ -263,30 +283,36 @@ class BadgeClickTests(ModTestCase):
         self.mock.run_real_callbacks()
         self.assertEqual(self.mock.quick_deal_button.clicks, 0)
 
-    def test_request_is_used_once(self):
-        self.click()
-        self.mock.run_real_callbacks()
-        self.open_diplomacy_manually()
-        self.mock.run_real_callbacks()
-        self.assertEqual(self.mock.quick_deal_button.clicks, 1)
-
-    def test_request_expires_if_diplomacy_does_not_open(self):
+    def test_stops_if_diplomacy_does_not_open(self):
         self.mock.diplomacy_button.on_click = None  # button disabled: nothing opens
         self.click()
         self.mock.run_real_callbacks()
-        self.open_diplomacy_manually()
-        self.mock.run_real_callbacks()
         self.assertEqual(self.mock.quick_deal_button.clicks, 0)
+        self.assertIn("[QDI] diplomacy panel not open, stopping", self.logs())
+        self.assertNoErrors()
 
-    def test_missing_quick_deal_button_is_logged(self):
-        self.mock.diplomacy_button.on_click = lambda *_: self.fire('{ string = "diplomacy_dropdown" }', "PanelOpenedCampaign")
+    def test_newer_click_supersedes_pending_steps(self):
+        self.click()
+        self.mock.run_real_callbacks(0)
         self.click()
         self.mock.run_real_callbacks()
-        self.assertIn("[QDI] quick deal button not found", self.logs())
+        self.assertEqual(self.mock.quick_deal_button.clicks, 1)
+        self.assertIn("[QDI] quick deal step: superseded by a newer click, skipped", self.logs())
+
+    def test_missing_quick_deal_button_is_logged(self):
+        def open_panel_without_buttons(*_):
+            self.fire('{ string = "diplomacy_dropdown" }', "PanelOpenedCampaign")
+
+        self.mock.diplomacy_button.on_click = open_panel_without_buttons
+        self.mock.diplomacy_open = False
+        self.click()
+        self.mock.run_real_callbacks()
+        self.assertIn("[QDI] diplomacy panel not open, stopping", self.logs())
         self.assertNoErrors()
 
     def test_other_component_clicks_are_ignored(self):
         self.click("button_missions")
+        self.mock.run_real_callbacks()
         self.assertEqual(self.mock.diplomacy_button.clicks, 0)
 
 
@@ -377,8 +403,7 @@ class DealTypeSelectionTests(ModTestCase):
 
     def click_and_settle(self):
         self.click()
-        self.mock.run_real_callbacks(0)    # quick deal button
-        self.mock.run_real_callbacks(100)  # deal type selection
+        self.mock.run_real_callbacks(300)  # diplomacy, quick deal, deal type steps
 
     def test_selects_first_type_in_screen_order(self):
         self.set_factions({"jade": {PEACE: (5.0, True), TRADE: (1.0, True)}})
@@ -436,7 +461,7 @@ class DealTypeSelectionTests(ModTestCase):
         self.click()
         self.mock.run_real_callbacks(0)
         self.assertEqual(buttons[TRADE].clicks, 0)
-        self.mock.run_real_callbacks(100)
+        self.mock.run_real_callbacks(300)
         self.assertEqual(buttons[TRADE].clicks, 1)
 
     def test_unknown_buttons_are_logged_and_left_alone(self):

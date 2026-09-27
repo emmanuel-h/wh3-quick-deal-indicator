@@ -17,6 +17,9 @@ local BADGE_NAME = "quick_deal_indicator_badge"
 local BADGE_LAYOUT = "ui/quick_deal_indicator/badge.twui.xml"
 local QUICK_DEAL_BUTTON_PATH = { DIPLOMACY_PANEL, "faction_panel", "faction_panel_bottom", "buttons_bl", "button_quick_deal" }
 local DEAL_TYPE_LIST_PATH = { DIPLOMACY_PANEL, "faction_panel", "list_quick_deal_buttons" }
+-- Delay between the steps of the badge click flow, so each simulated click has fully
+-- returned and the panel it opens is built before the next step looks for it.
+local CLICK_STEP_DELAY_MS = 300
 
 -- Game events after which deals are re-checked (during the local player's turn),
 -- in addition to turn start and any panel closing.
@@ -35,10 +38,9 @@ local LOC_QUICK_DEAL = "uied_component_texts_localised_string_dy_province_owned_
 local LOC_OPTION_PREFIX = "diplomacy_quick_deal_offers_localised_quick_deal_title_"
 local LOC_FACTION_PREFIX = "factions_screen_name_"
 
--- Set when the badge is clicked, consumed when the diplomacy panel opens.
-local quick_deal_requested = false
--- Deal type to select once the Quick Deal view is on (false: keep the game's).
-local requested_option = false
+-- Incremented on each badge click; a step of the click flow only acts if it still
+-- belongs to the latest click.
+local click_flow_id = 0
 -- A refresh is already scheduled.
 local refresh_pending = false
 
@@ -202,9 +204,8 @@ local function select_deal_type(option)
 	log("deal type " .. option .. " selected")
 end
 
---- Presses the diplomacy screen's Quick Deal button unless it is already on, then
--- selects the deal type once the list has been built.
-local function enable_quick_deal_view(option)
+--- Presses the diplomacy screen's Quick Deal button unless it is already on.
+local function enable_quick_deal_view()
 	local button = find_uicomponent(core:get_ui_root(), unpack(QUICK_DEAL_BUTTON_PATH))
 	if not button then
 		log("quick deal button not found")
@@ -213,19 +214,65 @@ local function enable_quick_deal_view(option)
 	local state = button:CurrentState()
 	if is_selected(state) then
 		log(string.format("quick deal view already enabled (%q)", tostring(state)))
-	else
-		log(string.format("clicking quick deal button (was %q)", tostring(state)))
-		button:SimulateLClick()
-		log("quick deal view enabled")
+		return
 	end
-	if option then
-		cm:real_callback(function()
-			local ok, err = pcall(select_deal_type, option)
-			if not ok then
-				log("ERROR selecting deal type: " .. tostring(err))
+	log(string.format("clicking quick deal button (was %q)", tostring(state)))
+	button:SimulateLClick()
+	log("quick deal view enabled")
+end
+
+--- Runs `step` after CLICK_STEP_DELAY_MS if no newer badge click happened meanwhile.
+local function after_delay(flow_id, name, step)
+	cm:real_callback(function()
+		if flow_id ~= click_flow_id then
+			log(name .. ": superseded by a newer click, skipped")
+			return
+		end
+		log(name)
+		local ok, err = pcall(step)
+		if not ok then
+			log("ERROR in " .. name .. ": " .. tostring(err))
+		end
+	end, CLICK_STEP_DELAY_MS, "qdi_" .. name:gsub(" ", "_"))
+end
+
+--- Badge click: open diplomacy, then the Quick Deal view, then the deal type.
+-- Every step runs from a timer, never inside a UI event, and is only scheduled once
+-- the previous simulated click has returned: reacting to PanelOpenedCampaign (which
+-- fires inside SimulateLClick) ran our next step re-entrantly on a half-built panel,
+-- stalled the script and crashed the game.
+local function start_click_flow()
+	click_flow_id = click_flow_id + 1
+	local flow_id = click_flow_id
+	local option = first_available_option((scan()))
+	log("badge clicked, first deal type: " .. tostring(option))
+
+	cm:real_callback(function()
+		if flow_id ~= click_flow_id then
+			return
+		end
+		local ok, err = pcall(function()
+			log("clicking diplomacy button")
+			diplomacy_button():SimulateLClick()
+			log("diplomacy button clicked")
+		end)
+		if not ok then
+			log("ERROR clicking diplomacy button: " .. tostring(err))
+			return
+		end
+		after_delay(flow_id, "quick deal step", function()
+			if not find_uicomponent(core:get_ui_root(), DIPLOMACY_PANEL) then
+				log("diplomacy panel not open, stopping")
+				return
 			end
-		end, 100, "qdi_deal_type")
-	end
+			enable_quick_deal_view()
+			if option then
+				after_delay(flow_id, "deal type step", function()
+					select_deal_type(option)
+				end)
+			end
+		end)
+	end, 0, "qdi_open_diplomacy")
 end
 
 local function refresh(reason)
@@ -330,58 +377,10 @@ local function init()
 			return hud_enabled and context.string == BADGE_NAME
 		end,
 		function()
-			local ok, err = pcall(function()
-				requested_option = first_available_option((scan())) or false
-				log("badge clicked, first deal type: " .. tostring(requested_option))
-				quick_deal_requested = true
-				-- Click the diplomacy button on the next UI update, not inside this click
-				-- handler: doing it here closed other open panels (e.g. the settlement
-				-- panel) during the event dispatch, after which the script's timers
-				-- stopped and the game crashed.
-				cm:real_callback(function()
-					local ok_click, err_click = pcall(function()
-						log("clicking diplomacy button")
-						diplomacy_button():SimulateLClick()
-						log("diplomacy button clicked")
-					end)
-					if not ok_click then
-						log("ERROR clicking diplomacy button: " .. tostring(err_click))
-					end
-				end, 0, "qdi_open_diplomacy")
-				-- If diplomacy didn't open (e.g. button disabled), forget the request so
-				-- a later manual opening isn't affected.
-				cm:real_callback(function()
-					quick_deal_requested = false
-				end, 2000, "qdi_quick_deal_expire")
-			end)
+			local ok, err = pcall(start_click_flow)
 			if not ok then
 				log("ERROR handling badge click: " .. tostring(err))
 			end
-		end,
-		true
-	)
-
-	core:add_listener(
-		"qdi_diplomacy_opened",
-		"PanelOpenedCampaign",
-		function(context)
-			return context.string == DIPLOMACY_PANEL
-		end,
-		function()
-			log("diplomacy panel opened, quick deal requested: " .. tostring(quick_deal_requested))
-			if not quick_deal_requested then
-				return
-			end
-			quick_deal_requested = false
-			local option = requested_option or nil
-			-- Let the panel finish building before pressing its button.
-			cm:real_callback(function()
-				log("enabling quick deal view")
-				local ok, err = pcall(enable_quick_deal_view, option)
-				if not ok then
-					log("ERROR enabling quick deal view: " .. tostring(err))
-				end
-			end, 0, "qdi_quick_deal")
 		end,
 		true
 	)
