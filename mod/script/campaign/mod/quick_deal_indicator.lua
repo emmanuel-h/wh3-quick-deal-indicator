@@ -10,7 +10,7 @@
 -- Read-only: the mod only queries the model and changes the local player's HUD,
 -- so it is safe in multiplayer.
 
-local VERSION = "1.0.0"
+local VERSION = "1.0.1"
 local LOG_PREFIX = "[QDI] "
 local DIPLOMACY_PANEL = "diplomacy_dropdown"
 local MIN_SCORE = 0
