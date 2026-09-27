@@ -353,33 +353,6 @@ class RefreshTests(ModTestCase):
         return sum(1 for line in self.logs() if line.startswith("[QDI] refresh ("))
 
 
-class BadgeHoverTests(ModTestCase):
-    def setUp(self):
-        super().setUp()
-        self.set_factions({"jade": {TRADE: (1.0, True)}, "custodians": {NAP: (2.0, True)}})
-        self.load_mod()
-
-    def test_brighter_state_while_hovered(self):
-        self.hover("quick_deal_indicator_badge")
-        self.assertEqual(self.badge().state, "hover")
-        self.fire('{ string = "quick_deal_indicator_badge" }', "ComponentMouseOff")
-        self.assertEqual(self.badge().state, "NewState")
-        self.assertNoErrors()
-
-    def test_count_is_set_on_both_states(self):
-        self.assertEqual(self.badge().state_texts["NewState"], "2")
-        self.assertEqual(self.badge().state_texts["hover"], "2")
-
-    def test_refresh_while_hovered_keeps_hover_state(self):
-        self.hover("quick_deal_indicator_badge")
-        self.panel_closed("technology_panel")
-        self.assertEqual(self.badge().state, "hover")
-
-    def test_hovering_other_components_does_nothing(self):
-        self.hover("button_missions")
-        self.assertEqual(self.badge().state, "NewState")
-
-
 class DealTypeSelectionTests(ModTestCase):
     """Clicking the badge selects the first deal type, in screen order, with a deal >= 0."""
 
@@ -409,17 +382,6 @@ class DealTypeSelectionTests(ModTestCase):
         self.click_and_settle()
         self.assertEqual(buttons[NAP].state, "selected")
 
-    def test_matches_buttons_by_tooltip_without_icon_markup(self):
-        self.set_loc({"diplomacy_quick_deal_offers_localised_quick_deal_title_" + TRADE:
-                      "[[img:icon_trade_agreement]][[/img]] Trade Agreement"})
-        self.set_factions({"jade": {TRADE: (1.0, True)}})
-        self.load_mod()
-        nap = self.mock.add_deal_type_button("button_0", "Non-Aggression Pact||Offer a pact")
-        trade = self.mock.add_deal_type_button("button_1", "Trade Agreement||Offer trade")
-        self.click_and_settle()
-        self.assertEqual(trade.state, "selected")
-        self.assertEqual(nap.clicks, 0)
-
     def test_already_selected_type_is_not_clicked(self):
         self.set_factions({"jade": {TRADE: (1.0, True)}})
         self.load_mod()
@@ -444,9 +406,16 @@ class DealTypeSelectionTests(ModTestCase):
         other = self.mock.add_deal_type_button("mystery", "Something")
         self.click_and_settle()
         self.assertEqual(other.clicks, 0)
-        logs = self.logs()
-        self.assertIn("[QDI]   deal type button 0: id=mystery state=active tooltip=Something", logs)
-        self.assertIn("[QDI] no deal type button matches " + TRADE + ", keeping the game's selection", logs)
+        self.assertIn("[QDI] no deal type button " + TRADE + " (1 buttons), keeping the game's selection",
+                      self.logs())
+        self.assertNoErrors()
+
+    def test_game_button_tooltips_are_never_read(self):
+        # The mock raises on GetTooltipText; any call would be logged as an error.
+        self.set_factions({"jade": {TRADE: (1.0, True)}})
+        self.load_mod()
+        self.add_buttons_by_id()
+        self.click_and_settle()
         self.assertNoErrors()
 
 

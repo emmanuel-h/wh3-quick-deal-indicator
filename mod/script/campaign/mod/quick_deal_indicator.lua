@@ -15,7 +15,6 @@ local DIPLOMACY_PANEL = "diplomacy_dropdown"
 local MIN_SCORE = 0
 local BADGE_NAME = "quick_deal_indicator_badge"
 local BADGE_LAYOUT = "ui/quick_deal_indicator/badge.twui.xml"
-local BADGE_STATES = { "NewState", "hover" }
 local QUICK_DEAL_BUTTON_PATH = { DIPLOMACY_PANEL, "faction_panel", "faction_panel_bottom", "buttons_bl", "button_quick_deal" }
 local DEAL_TYPE_LIST_PATH = { DIPLOMACY_PANEL, "faction_panel", "list_quick_deal_buttons" }
 
@@ -146,21 +145,11 @@ local function build_tooltip(deals)
 	return common.get_localised_string(LOC_QUICK_DEAL) .. "||" .. table.concat(lines, "\n")
 end
 
---- Sets the count on every badge state (SetStateText only affects the current one).
-local function set_badge_text(badge, text)
-	local current = badge:CurrentState()
-	for _, state in ipairs(BADGE_STATES) do
-		badge:SetState(state)
-		badge:SetStateText(text)
-	end
-	badge:SetState(current)
-end
-
 --- Shows the number of factions and the deal list on our badge, or hides it at 0.
 local function update_badge(button, deals, faction_count)
 	local badge = core:get_or_create_component(BADGE_NAME, BADGE_LAYOUT, button)
 	if faction_count > 0 then
-		set_badge_text(badge, tostring(faction_count))
+		badge:SetStateText(tostring(faction_count))
 		badge:SetTooltipText(build_tooltip(deals), true)
 		badge:SetVisible(true)
 	else
@@ -182,43 +171,28 @@ local function first_available_option(deals)
 	return nil
 end
 
---- Deal name without its icon markup, e.g. "[[img:icon_x]][[/img]] Trade Agreement" -> "Trade Agreement".
-local function plain_option_title(option)
-	local title = common.get_localised_string(LOC_OPTION_PREFIX .. option)
-	title = title:gsub("%[%[img:[^%]]*%]%]%[%[/img%]%]", "")
-	title = title:gsub("^%s+", ""):gsub("%s+$", "")
-	return title
-end
-
 --- Selects the deal-type button for `option` under the Known Factions list.
--- The buttons are created by the game; they are matched by id or tooltip, and
--- every button is logged so an unmatched layout can be diagnosed.
+-- The game creates these buttons with the option key as id (seen in-game, e.g.
+-- "diplomatic_option_nonaggression_pact"). Only ids and states are read: reading
+-- tooltips of game components is avoided (suspected in a crash, see README).
 local function select_deal_type(option)
 	local list = find_uicomponent(core:get_ui_root(), unpack(DEAL_TYPE_LIST_PATH))
 	if not list then
 		log("deal type list not found")
 		return
 	end
-	local title = plain_option_title(option)
-	local match
-	for i = 0, list:ChildCount() - 1 do
-		local child = UIComponent(list:Find(i))
-		local id, tooltip = child:Id(), child:GetTooltipText() or ""
-		log(string.format("  deal type button %d: id=%s state=%s tooltip=%s", i, id, child:CurrentState(), tooltip))
-		if not match and (id:find(option, 1, true) or (title ~= "" and tooltip:find(title, 1, true))) then
-			match = child
-		end
-	end
-	if not match then
-		log("no deal type button matches " .. option .. ", keeping the game's selection")
+	local button = find_uicomponent(list, option)
+	if not button then
+		log("no deal type button " .. option .. " (" .. list:ChildCount() .. " buttons), keeping the game's selection")
 		return
 	end
-	if match:CurrentState():find("^selected") then
-		log("deal type " .. option .. " already selected")
+	local state = button:CurrentState()
+	if state:find("^selected") then
+		log("deal type " .. option .. " already selected (" .. state .. ")")
 		return
 	end
-	match:SimulateLClick()
-	log("deal type " .. option .. " selected")
+	button:SimulateLClick()
+	log("deal type " .. option .. " selected (was " .. state .. ")")
 end
 
 --- Presses the diplomacy screen's Quick Deal button unless it is already on, then
@@ -284,11 +258,6 @@ local function schedule_refresh(reason)
 	end, REFRESH_DELAY_MS, "qdi_refresh")
 end
 
-local function badge_component()
-	local button = diplomacy_button()
-	return button and find_uicomponent(button, BADGE_NAME)
-end
-
 local function init()
 	log("init, HUD " .. (hud_enabled and "enabled" or "disabled (" .. NO_HUD_FILE .. ")"))
 
@@ -327,37 +296,6 @@ local function init()
 		true,
 		function(context)
 			schedule_refresh("panel closed: " .. tostring(context.string))
-		end,
-		true
-	)
-
-	-- Brighter badge while hovered, to show it's clickable.
-	core:add_listener(
-		"qdi_badge_hover_on",
-		"ComponentMouseOn",
-		function(context)
-			return hud_enabled and context.string == BADGE_NAME
-		end,
-		function()
-			local badge = badge_component()
-			if badge then
-				badge:SetState("hover")
-			end
-		end,
-		true
-	)
-
-	core:add_listener(
-		"qdi_badge_hover_off",
-		"ComponentMouseOff",
-		function(context)
-			return hud_enabled and context.string == BADGE_NAME
-		end,
-		function()
-			local badge = badge_component()
-			if badge then
-				badge:SetState("NewState")
-			end
 		end,
 		true
 	)

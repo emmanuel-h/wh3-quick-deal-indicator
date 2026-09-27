@@ -108,6 +108,10 @@ mock.deal_type_list = new_component("list_quick_deal_buttons")
 function mock.add_deal_type_button(id, tooltip)
 	local b = new_component(id)
 	b.tooltip = tooltip
+	-- Reading tooltips of game-created components was suspected in a crash.
+	b.GetTooltipText = function()
+		error("GetTooltipText on a game deal-type button is forbidden (suspected crash)", 2)
+	end
 	b.on_click = function(c)
 		-- Radio behaviour: selecting one deselects the others.
 		for _, other in ipairs(mock.deal_type_list.children) do other.state = "active" end

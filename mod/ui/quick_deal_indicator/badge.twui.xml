@@ -5,8 +5,8 @@
 	docking) without its context callbacks. It is interactive: it shows its own tooltip
 	(the deal list) and forwards clicks to the diplomacy button. Text, tooltip and
 	visibility are set from script.
-	States: NewState (normal) and hover (same, with the brighter badge_hover.png and white
-	text), switched from script on ComponentMouseOn/Off.
+	Single state on purpose: a second "hover" state got stuck (the game switched to it by
+	itself) in a build that also crashed; see README "Known crashes".
 -->
 <layout
 	version="142"
@@ -52,10 +52,6 @@
 					this="285A5986-41AA-4865-BB47B00BBF0574F9"
 					uniqueguid="285A5986-41AA-4865-BB47B00BBF0574F9"
 					imagepath="ui/skins/default/spell_dial_grudges_display.png"/>
-				<component_image
-					this="8DDC968A-739E-4374-8DF070B264BAB0A2"
-					uniqueguid="8DDC968A-739E-4374-8DF070B264BAB0A2"
-					imagepath="ui/quick_deal_indicator/badge_hover.png"/>
 			</componentimages>
 			<states>
 				<newstate
@@ -88,36 +84,6 @@
 						text_shader_name="text_outline_t0"
 						textshadervars="0.00,0.00,0.00,1.00"/>
 				</newstate>
-				<hover
-					this="7DA96DF3-8C2C-4EB0-BFCF0003DA93B455"
-					name="hover"
-					width="42"
-					height="41"
-					interactive="true"
-					uniqueguid="7DA96DF3-8C2C-4EB0-BFCF0003DA93B455">
-					<imagemetrics>
-						<image
-							this="8368023A-137B-4BA5-8785C09CC3D32A0F"
-							uniqueguid="8368023A-137B-4BA5-8785C09CC3D32A0F"
-							componentimage="8DDC968A-739E-4374-8DF070B264BAB0A2"
-							offset="0.00,-1.00"
-							width="42"
-							height="41"
-							dockpoint="Center"
-							dock_offset="0.00,-1.00"
-							rotation_angle="1.48352981"/>
-					</imagemetrics>
-					<component_text
-						text="0"
-						texthalign="Center"
-						textyoffset="13.00,0.00"
-						texthbehaviour="Never split"
-						font_m_colour="#FFFFFFFF"
-						font_m_leading="3"
-						fontcat_name="body_10"
-						text_shader_name="text_outline_t0"
-						textshadervars="0.00,0.00,0.00,1.00"/>
-				</hover>
 			</states>
 		</qdi_badge>
 	</components>

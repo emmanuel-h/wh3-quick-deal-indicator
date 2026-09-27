@@ -235,8 +235,8 @@ To uninstall completely: untick it in the launcher and delete
 | No badge at all | No deal ≥ 0 right now (normal), or the mod isn't loaded | Check the debug log: `0 deal(s)` is normal. Otherwise section 2.1 |
 | Badge number doesn't match the diplomacy screen | The screen changed since the last refresh (the mod refreshes on load, turn start and when diplomacy closes) | Open and close diplomacy, compare again. Still wrong → section 3 |
 | Clicking the badge does nothing | The game didn't deliver the click to the badge | Check the debug log for `badge clicked`. Missing → report it; click the button outside the badge meanwhile |
-| Badge doesn't light up on hover | The game didn't send the hover events to the badge | Harmless. Report it with the debug log |
-| Quick Deal view opens on the wrong deal type | The deal-type buttons couldn't be matched | The log lists every `deal type button` with its id and tooltip, then `no deal type button matches ...`. Report it with that part of the log |
+| Quick Deal view opens on the wrong deal type | The game renamed its deal-type buttons | The log shows `no deal type button ...`. Report it with that part of the log |
+| Badge stays brighter / looks different after clicking | Shouldn't happen any more (it had a hover state once) | Report it with a screenshot |
 | Badge not updated after moving an army or a battle | Refreshes only happen on your own turn, 250 ms after the event | Check the log for `refresh (CharacterFinishedMovingEvent)` etc. Open and close any panel to force a refresh |
 | Diplomacy opens but not on the Quick Deal view | The diplomacy screen layout changed | The log shows `quick deal button not found`; report it |
 | `diplomacy button not found` in the log | Game patch or another HUD mod changed the HUD | Try without other UI mods; report it |
