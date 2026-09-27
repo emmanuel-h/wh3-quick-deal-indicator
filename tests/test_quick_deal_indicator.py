@@ -242,9 +242,12 @@ class BadgeClickTests(ModTestCase):
 
     def test_click_opens_diplomacy_then_quick_deal_view(self):
         self.click()
+        # Nothing is clicked inside the UI click handler itself (crash in-game when
+        # that closed other panels during the event dispatch).
+        self.assertEqual(self.mock.diplomacy_button.clicks, 0)
+        self.assertEqual(self.mock.quick_deal_button.clicks, 0)
+        self.mock.run_real_callbacks(0)
         self.assertEqual(self.mock.diplomacy_button.clicks, 1)
-        self.assertEqual(self.mock.quick_deal_button.clicks, 0, "must wait for the panel to build")
-        self.mock.run_real_callbacks()
         self.assertEqual(self.mock.quick_deal_button.clicks, 1)
         self.assertEqual(self.mock.quick_deal_button.state, "selected")
         self.assertNoErrors()
@@ -488,6 +491,8 @@ class RobustnessTests(ModTestCase):
         self.load_mod()
         content = Path("quick_deal_indicator_debug.txt").read_text()
         self.assertIn("[QDI] refresh (campaign loaded): 1 deal(s) with 1 faction(s)", content)
+        heartbeats = [cb.name for cb in (self.mock.repeat_callbacks or {}).values()]
+        self.assertEqual(heartbeats, ["qdi_heartbeat"])
 
 
 if __name__ == "__main__":

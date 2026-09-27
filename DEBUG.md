@@ -88,12 +88,17 @@ The mod only writes this log if the file already exists. To turn it on:
    name extensions**).
 4. Launch the game and reproduce the problem.
 
-What you'll see:
+What you'll see (the first number is the time in seconds since the game started):
 
 ```
-[QDI] refresh (campaign loaded): 1 deal(s) with 1 faction(s)
-[QDI]   wh3_main_cth_eastern_river_lords diplomatic_option_trade_agreement 5.2
+   412.35 [QDI] refresh (campaign loaded): 1 deal(s) with 1 faction(s)
+   412.35 [QDI]   wh3_main_cth_eastern_river_lords diplomatic_option_trade_agreement 5.2
+   417.36 [QDI] heartbeat
 ```
+
+- A `heartbeat` line every 5 seconds means the mod's script is alive. If heartbeats
+  stop while the game is still running, the script has stalled: note the last lines
+  before the gap, they show what it was doing. A stalled script has preceded crashes.
 
 - One `refresh (...)` block per campaign load, turn start and diplomacy screen close.
 - `[QDI] ERROR during refresh: ...` → the script hit an error; the message says where.

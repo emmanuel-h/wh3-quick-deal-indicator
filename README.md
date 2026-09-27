@@ -11,10 +11,10 @@ has an acceptable deal. The count is kept up to date as you play.
 
 🚧 Work in progress. Validated in-game, with no crash over 10-minute sessions: detection,
 the badge and its tooltip, clicking it to open diplomacy on the Quick Deal view with the
-first available deal type selected, and refreshing when a panel closes. Awaiting
-in-game confirmation: refresh after army moves and other game events. Still to test:
-turn start, French, multiplayer. A hover highlight is postponed. Two builds crashed the
-game; see [Known crashes](#known-crashes).
+first available deal type selected, and refreshing when a panel closes. Refresh after army
+moves is confirmed too. Under investigation: a crash after clicking the badge while
+another panel was open (see [Known crashes](#known-crashes)). Still to test: turn start,
+French, multiplayer. A hover highlight is postponed.
 
 ## Installation
 
@@ -98,7 +98,7 @@ score is ≥ 0.
 
 ### Known crashes
 
-Both crashes had the same signature: access violation reading address 0 at
+All crashes had the same signature: access violation reading address 0 at
 `Warhammer3.exe+0x244e743`, main thread, typically when clicking an army. Crash reports
 are in `%APPDATA%\The Creative Assembly\Warhammer3\crash_report\`.
 
@@ -131,6 +131,22 @@ The next build removed the `hover` state and all tooltip reads on game component
 refresh. The mocks reject `GetTooltipText` on game deal-type buttons. That build ran
 10 minutes without crashing (badge click, deal-type selection, army clicks and moves),
 so the cause was one of the two removed parts; which one isn't established.
+
+#### 3. Badge clicked while another panel was open
+
+With the settlement panel open, clicking the badge logged `badge clicked`, then the
+settlement panel closing *during the click handler* (the simulated click on the
+diplomacy button closed it synchronously). After that no timer callback ever ran again
+(not the Quick Deal step, not the scheduled refresh, not the 2 s expiry), and the game
+crashed 35 s later when clicking an army. The two sessions where the click flow worked
+had no other panel open. Crash 2 showed the same pattern: the script stalled silently
+mid-flow, then the game crashed.
+
+Hypothesis being tested: calling `SimulateLClick` synchronously inside a UI event
+handler is unsafe when it closes other panels. The diplomacy click is now deferred to
+the next UI update (`cm:real_callback(..., 0)`), every step of the flow is logged, the
+debug log carries timestamps (`os.clock()`), and in debug mode a `heartbeat` line every
+5 s shows whether the script's timers are still running.
 
 Also seen in-game: a deal-type button whose state was logged as `selected` didn't match
 the Lua pattern `^selected`, so it was clicked again. States are now checked with a
@@ -248,7 +264,10 @@ create the debug file, then:
 4. **Badge click** — click the badge: diplomacy opens on the Known Factions list with the
    Deal chance column (Quick Deal enabled), with the first deal type that has a deal ≥ 0
    selected. The log shows `badge clicked, first deal type: ...`,
-   `quick deal view enabled`, then `deal type ... selected` (or `already selected`). Clicking the diplomacy button outside the badge opens
+   `clicking diplomacy button`, `diplomacy panel opened ...`, `enabling quick deal view`,
+   `quick deal view enabled`, then `deal type ... selected` (or `already selected`).
+   Repeat with other panels open first (a settlement, an army's units, recruitment,
+   technologies), and check the `heartbeat` lines keep coming afterwards. Clicking the diplomacy button outside the badge opens
    diplomacy normally.
 5. **Live refresh** — move an army, win a battle, or open and close any panel: the log
    shows `event <name>: refresh scheduled` (or why it was skipped), then a

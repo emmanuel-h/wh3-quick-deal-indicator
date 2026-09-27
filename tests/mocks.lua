@@ -182,6 +182,10 @@ cm = strict("cm", {
 	real_callback = function(_, f, ms, name)
 		table.insert(mock.real_callbacks, { f = f, ms = ms, name = name })
 	end,
+	repeat_real_callback = function(_, f, ms, name)
+		mock.repeat_callbacks = mock.repeat_callbacks or {}
+		table.insert(mock.repeat_callbacks, { f = f, ms = ms, name = name })
+	end,
 })
 
 core = strict("core", {
@@ -223,15 +227,21 @@ function mock.fire(event, context)
 	end
 end
 
--- Runs pending real callbacks whose delay is <= max_ms (all when omitted).
+-- Lets time pass: runs pending real callbacks whose delay is <= max_ms (all when
+-- omitted), including callbacks those schedule in turn, until none is due.
 function mock.run_real_callbacks(max_ms)
-	local pending = mock.real_callbacks
-	mock.real_callbacks = {}
-	for _, cb in ipairs(pending) do
-		if max_ms == nil or cb.ms <= max_ms then
-			cb.f()
-		else
-			table.insert(mock.real_callbacks, cb)
+	local ran = true
+	while ran do
+		ran = false
+		local pending = mock.real_callbacks
+		mock.real_callbacks = {}
+		for _, cb in ipairs(pending) do
+			if max_ms == nil or cb.ms <= max_ms then
+				cb.f()
+				ran = true
+			else
+				table.insert(mock.real_callbacks, cb)
+			end
 		end
 	end
 end

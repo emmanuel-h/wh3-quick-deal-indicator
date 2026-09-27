@@ -85,7 +85,7 @@ local function log(msg)
 	if debug_enabled then
 		pcall(function()
 			local f = io.open(DEBUG_FILE, "a")
-			f:write(msg .. "\n")
+			f:write(string.format("%9.2f %s\n", os.clock(), msg))
 			f:close()
 		end)
 	end
@@ -197,8 +197,9 @@ local function select_deal_type(option)
 		log(string.format("deal type %s already selected (%q)", option, tostring(state)))
 		return
 	end
+	log(string.format("clicking deal type %s (was %q)", option, tostring(state)))
 	button:SimulateLClick()
-	log(string.format("deal type %s selected (was %q)", option, tostring(state)))
+	log("deal type " .. option .. " selected")
 end
 
 --- Presses the diplomacy screen's Quick Deal button unless it is already on, then
@@ -213,8 +214,9 @@ local function enable_quick_deal_view(option)
 	if is_selected(state) then
 		log(string.format("quick deal view already enabled (%q)", tostring(state)))
 	else
+		log(string.format("clicking quick deal button (was %q)", tostring(state)))
 		button:SimulateLClick()
-		log(string.format("quick deal view enabled (was %q)", tostring(state)))
+		log("quick deal view enabled")
 	end
 	if option then
 		cm:real_callback(function()
@@ -273,6 +275,13 @@ end
 local function init()
 	log("init, HUD " .. (hud_enabled and "enabled" or "disabled (" .. NO_HUD_FILE .. ")"))
 
+	-- Debug mode: a log line every 5 s shows whether the script's timers still run.
+	if debug_enabled then
+		cm:repeat_real_callback(function()
+			log("heartbeat")
+		end, 5000, "qdi_heartbeat")
+	end
+
 	-- Loading a save mid-turn: show the current state straight away.
 	refresh("campaign loaded")
 
@@ -325,7 +334,20 @@ local function init()
 				requested_option = first_available_option((scan())) or false
 				log("badge clicked, first deal type: " .. tostring(requested_option))
 				quick_deal_requested = true
-				diplomacy_button():SimulateLClick()
+				-- Click the diplomacy button on the next UI update, not inside this click
+				-- handler: doing it here closed other open panels (e.g. the settlement
+				-- panel) during the event dispatch, after which the script's timers
+				-- stopped and the game crashed.
+				cm:real_callback(function()
+					local ok_click, err_click = pcall(function()
+						log("clicking diplomacy button")
+						diplomacy_button():SimulateLClick()
+						log("diplomacy button clicked")
+					end)
+					if not ok_click then
+						log("ERROR clicking diplomacy button: " .. tostring(err_click))
+					end
+				end, 0, "qdi_open_diplomacy")
 				-- If diplomacy didn't open (e.g. button disabled), forget the request so
 				-- a later manual opening isn't affected.
 				cm:real_callback(function()
@@ -346,6 +368,7 @@ local function init()
 			return context.string == DIPLOMACY_PANEL
 		end,
 		function()
+			log("diplomacy panel opened, quick deal requested: " .. tostring(quick_deal_requested))
 			if not quick_deal_requested then
 				return
 			end
@@ -353,6 +376,7 @@ local function init()
 			local option = requested_option or nil
 			-- Let the panel finish building before pressing its button.
 			cm:real_callback(function()
+				log("enabling quick deal view")
 				local ok, err = pcall(enable_quick_deal_view, option)
 				if not ok then
 					log("ERROR enabling quick deal view: " .. tostring(err))
