@@ -7,8 +7,8 @@ Known Factions list. Hovering the button lists each faction, deal type and chanc
 
 ## Status
 
-🚧 Work in progress. The detection method has been validated in-game (see
-[How it works](#how-it-works)); the HUD badge and tooltip are being implemented.
+🚧 Work in progress. Detection is validated in-game; the badge and tooltip are
+implemented and awaiting in-game testing.
 
 ## Installation
 
@@ -51,12 +51,38 @@ offers; they only appear for factions that can use them, so the mod checks all n
 and keeps those where `can_issue` is true. A deal counts as available when the raw
 score is ≥ 0.
 
+### When it refreshes
+
+- when the campaign is loaded,
+- at the start of the local player's turn (`ScriptEventHumanFactionTurnStart`, filtered
+  on `cm:get_local_faction_name(true)` so each multiplayer client only handles itself),
+- when the diplomacy screen closes (`PanelClosedCampaign` with `diplomacy_dropdown`),
+  so deals signed during the turn are taken into account.
+
+### HUD
+
+- **Badge** — `ui/quick_deal_indicator/badge.twui.xml` is a copy of the vanilla missions
+  counter (`hud_campaign.twui.xml > label_missions_count`) without its context callbacks.
+  It is created under `faction_buttons_docker > button_diplomacy` with
+  `core:get_or_create_component`, shows the number of **factions** with at least one
+  deal ≥ 0, and is hidden at 0. It is non-interactive so hovering it still hovers the
+  button.
+- **Tooltip** — the game sets the button's vanilla tooltip itself, so the mod appends its
+  section on `ComponentMouseOn` (and once more on the next UI update), stripping any
+  previous section first. One line per deal: `Faction - Deal type (chance)`.
+- **Localisation** — every string is vanilla: the "Quick Deal" label of the diplomacy
+  screen, `factions_screen_name_*` and
+  `diplomacy_quick_deal_offers_localised_quick_deal_title_*`. The tooltip therefore
+  follows the game language (English, French, …) and the mod ships no `.loc` file.
+
 ## Repository layout
 
 ```
 mod/                          # Files packed into quick_deal_indicator.pack
-└── script/campaign/mod/
-    └── quick_deal_indicator.lua
+├── script/campaign/mod/
+│   └── quick_deal_indicator.lua
+└── ui/quick_deal_indicator/
+    └── badge.twui.xml
 tools/
 ├── packtool.py               # list / extract / build PFH5 packs
 └── probe/                    # Debug mod: logs every Quick Deal score to a file
@@ -105,8 +131,34 @@ cp build/quick_deal_probe.pack "$GAME/data/"
 
 ### Logs
 
-The game writes script loading errors to `$GAME/lua_mod_log.txt`. Messages from the mod
-go through `out()` with the `[QDI]` prefix.
+- `$GAME/lua_mod_log.txt` — written by the game; shows whether the script loaded or
+  failed (syntax errors end up here).
+- `$GAME/quick_deal_indicator_debug.txt` — create this empty file to turn on the mod's
+  debug log. Each refresh appends its reason and every deal found. Delete it to turn
+  logging off.
+- The same messages also go to the standard script log through `out()`, prefixed `[QDI]`.
+
+### Testing checklist
+
+Enable only `quick_deal_indicator` (plus `quick_deal_probe` if you want raw scores) and
+create the debug file, then:
+
+1. **Load a campaign** — the badge shows the number of factions that have a deal ≥ 0,
+   or nothing if there are none. The debug log has a `refresh (campaign loaded)` block.
+2. **Compare with the game** — open diplomacy; for every deal-type button, each faction
+   whose *Deal chance* is ≥ 0 must appear in the tooltip with the same value, and no
+   other.
+3. **Tooltip** — hover the diplomacy button: vanilla text first, then the
+   "Quick Deal" section. Hover several times: the section must not repeat.
+4. **Refresh on close** — sign one of the listed deals, close diplomacy: the badge
+   and tooltip update (`refresh (diplomacy closed)` in the log).
+5. **Turn start** — end the turn: a `refresh (turn start)` block appears, and nothing
+   flashes on screen.
+6. **Zero case** — with no deal ≥ 0, no badge and a vanilla tooltip.
+7. **French** — set the game language to French: the tooltip section is in French.
+8. **Multiplayer** — play a few co-op turns with both players running the mod: no
+   desync, and each player sees only their own deals.
+9. **No errors** in `lua_mod_log.txt`.
 
 ## License
 

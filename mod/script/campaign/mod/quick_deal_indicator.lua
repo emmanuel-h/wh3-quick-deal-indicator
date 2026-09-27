@@ -11,6 +11,15 @@ local MIN_SCORE = 0
 local BADGE_NAME = "quick_deal_indicator_badge"
 local BADGE_LAYOUT = "ui/quick_deal_indicator/badge.twui.xml"
 
+-- All tooltip text comes from vanilla strings, so it follows the game language.
+local LOC_QUICK_DEAL = "uied_component_texts_localised_string_dy_province_owned_Text_3f0076"
+local LOC_OPTION_PREFIX = "diplomacy_quick_deal_offers_localised_quick_deal_title_"
+local LOC_FACTION_PREFIX = "factions_screen_name_"
+local SECTION_START = "\n\n[[col:yellow]]"
+
+-- Lines appended to the diplomacy button tooltip; "" when there's nothing to show.
+local tooltip_section = ""
+
 -- Every Quick Deal offer (vanilla diplomacy_quick_deal_offers table), in the
 -- order of the buttons under the Known Factions list. Options a faction can't
 -- use are reported with can_issue == false and skipped.
@@ -26,8 +35,28 @@ local OPTIONS = {
 	"diplomatic_option_confederation",
 }
 
+-- Debug logging to a file is opt-in: create an empty quick_deal_indicator_debug.txt
+-- in the game folder and the mod appends its log to it.
+local DEBUG_FILE = "quick_deal_indicator_debug.txt"
+local debug_enabled = false
+pcall(function()
+	local f = io.open(DEBUG_FILE, "r")
+	if f then
+		f:close()
+		debug_enabled = true
+	end
+end)
+
 local function log(msg)
-	out(LOG_PREFIX .. tostring(msg))
+	msg = LOG_PREFIX .. tostring(msg)
+	out(msg)
+	if debug_enabled then
+		pcall(function()
+			local f = io.open(DEBUG_FILE, "a")
+			f:write(msg .. "\n")
+			f:close()
+		end)
+	end
 end
 
 local function local_faction()
@@ -83,6 +112,31 @@ local function update_badge(button, faction_count)
 	end
 end
 
+local function build_tooltip_section(deals)
+	if #deals == 0 then
+		return ""
+	end
+	local lines = { SECTION_START .. common.get_localised_string(LOC_QUICK_DEAL) .. "[[/col]]" }
+	for _, deal in ipairs(deals) do
+		table.insert(lines, string.format("%s - %s (%.1f)",
+			common.get_localised_string(LOC_FACTION_PREFIX .. deal.faction:name()),
+			common.get_localised_string(LOC_OPTION_PREFIX .. deal.option),
+			deal.score))
+	end
+	return table.concat(lines, "\n")
+end
+
+--- Re-applies our section after the vanilla tooltip. The game sets the vanilla
+-- text itself (and may reset it), so this strips any previous section first.
+local function apply_tooltip(button)
+	local text = button:GetTooltipText() or ""
+	local start = text:find(SECTION_START, 1, true)
+	if start then
+		text = text:sub(1, start - 1)
+	end
+	button:SetTooltipText(text .. tooltip_section, true)
+end
+
 local function refresh(reason)
 	local ok, err = pcall(function()
 		local deals, faction_count = scan()
@@ -97,6 +151,8 @@ local function refresh(reason)
 			return
 		end
 		update_badge(button, faction_count)
+		tooltip_section = build_tooltip_section(deals)
+		apply_tooltip(button)
 	end)
 	if not ok then
 		log("ERROR during refresh: " .. tostring(err))
@@ -127,6 +183,29 @@ local function init()
 		end,
 		function()
 			refresh("diplomacy closed")
+		end,
+		true
+	)
+
+	-- The game fills in the vanilla tooltip on its own schedule; append ours on
+	-- hover, and once more on the next UI update in case the game resets it.
+	core:add_listener(
+		"qdi_diplomacy_button_hover",
+		"ComponentMouseOn",
+		function(context)
+			return context.string == "button_diplomacy"
+		end,
+		function()
+			local button = diplomacy_button()
+			if button then
+				apply_tooltip(button)
+				cm:real_callback(function()
+					local later = diplomacy_button()
+					if later then
+						apply_tooltip(later)
+					end
+				end, 0, "qdi_tooltip")
+			end
 		end,
 		true
 	)
