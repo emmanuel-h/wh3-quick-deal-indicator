@@ -78,6 +78,10 @@ local function new_component(id)
 	c.clicks = 0
 	c.CurrentState = function() return c.state end
 	c.SetState = function(_, state) c.state = state end
+	c.x, c.y, c.w, c.h = 0, 0, 10, 10
+	c.Position = function() return c.x, c.y end
+	c.Dimensions = function() return c.w, c.h end
+	c.MoveTo = function(_, x, y) c.x, c.y = x, y end
 	c.SimulateLClick = function()
 		c.clicks = c.clicks + 1
 		if c.on_click then c.on_click(c) end
@@ -94,7 +98,10 @@ local function new_component(id)
 end
 
 mock.ui_root = new_component("root")
+mock.docker = new_component("faction_buttons_docker")
 mock.diplomacy_button = new_component("button_diplomacy")
+mock.diplomacy_button.x, mock.diplomacy_button.y = 1700, 950
+mock.diplomacy_button.w, mock.diplomacy_button.h = 55, 55
 -- The vanilla button's tooltip is driven by a ContextTooltipSetter callback;
 -- setting it from script crashed the game in testing.
 mock.diplomacy_button.SetTooltipText = function()
@@ -166,6 +173,9 @@ function find_uicomponent(parent, ...)
 	end
 	if mock.diplomacy_open and path_is(path, { "diplomacy_dropdown", "faction_panel", "list_quick_deal_buttons" }) then
 		return mock.deal_type_list
+	end
+	if path_is(path, { "faction_buttons_docker" }) then
+		return mock.docker
 	end
 	if path_is(path, { "faction_buttons_docker", "button_diplomacy" }) then
 		return mock.diplomacy_button
@@ -294,7 +304,7 @@ mock.diplomacy_button.on_click = function()
 end
 
 function mock.badge()
-	for _, child in ipairs(mock.diplomacy_button.children) do
+	for _, child in ipairs(mock.docker.children) do
 		if child.id == "quick_deal_indicator_badge" then
 			return child
 		end

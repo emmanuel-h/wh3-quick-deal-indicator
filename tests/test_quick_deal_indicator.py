@@ -178,9 +178,38 @@ class BadgeTests(ModTestCase):
         self.load_mod()
         self.panel_closed("diplomacy_dropdown")
         self.turn_start("player")
-        badges = [c for c in self.mock.diplomacy_button.children.values() if c.id == "quick_deal_indicator_badge"]
+        badges = [c for c in self.mock.docker.children.values() if c.id == "quick_deal_indicator_badge"]
         self.assertEqual(len(badges), 1)
         self.assertEqual(badges[0].layout, "ui/quick_deal_indicator/badge.twui.xml")
+
+    def test_badge_is_outside_the_diplomacy_button(self):
+        # Inside it, the button's StatePropagatorCallback overrides the badge's own hover.
+        self.set_factions({"jade": {TRADE: (1.0, True)}})
+        self.load_mod()
+        self.assertEqual(len(self.mock.diplomacy_button.children), 0)
+        self.assertIsNotNone(self.badge())
+
+    def test_badge_is_placed_on_the_buttons_bottom_right_corner(self):
+        # Like the vanilla missions badge: 42x41, bottom-right at corner + (23, 13).
+        self.set_factions({"jade": {TRADE: (1.0, True)}})
+        self.load_mod()
+        badge = self.badge()
+        self.assertEqual((badge.x, badge.y), (1700 + 55 + 23 - 42, 950 + 55 + 13 - 41))
+
+    def test_badge_follows_the_button_when_it_moves(self):
+        self.set_factions({"jade": {TRADE: (1.0, True)}})
+        self.load_mod()
+        self.mock.diplomacy_button.x, self.mock.diplomacy_button.y = 1600, 900
+        self.panel_closed("technology_panel")
+        badge = self.badge()
+        self.assertEqual((badge.x, badge.y), (1600 + 36, 900 + 27))
+
+    def test_badge_hidden_when_the_button_is_hidden(self):
+        self.set_factions({"jade": {TRADE: (1.0, True)}})
+        self.load_mod()
+        self.mock.diplomacy_button.visible = False
+        self.panel_closed("technology_panel")
+        self.assertIsNone(self.badge_count())
 
     def test_count_is_set_on_every_state_and_badge_left_normal(self):
         self.set_factions({"jade": {TRADE: (1.0, True)}, "custodians": {NAP: (2.0, True)}})
@@ -553,7 +582,7 @@ class RobustnessTests(ModTestCase):
         self.hover()
         self.turn_start("player")
         self.panel_closed("diplomacy_dropdown")
-        self.assertEqual(len(self.mock.diplomacy_button.children), 0)
+        self.assertEqual(len(self.mock.docker.children), 0)
         self.assertEqual(self.tooltip(), VANILLA_TOOLTIP)
         content = Path("quick_deal_indicator_debug.txt").read_text()
         self.assertIn("HUD disabled", content)

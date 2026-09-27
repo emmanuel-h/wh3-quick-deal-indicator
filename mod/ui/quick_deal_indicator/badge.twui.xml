@@ -1,15 +1,16 @@
 <?xml version="1.0"?>
 <!--
-	Count badge shown on the HUD diplomacy button.
-	Copied from vanilla hud_campaign.twui.xml > label_missions_count (same image, font and
-	docking) without its context callbacks. It is interactive: it shows its own tooltip
+	Count badge shown over the HUD diplomacy button's bottom-right corner.
+	Copied from vanilla hud_campaign.twui.xml > label_missions_count (same image and font)
+	without its context callbacks. It is created under faction_buttons_docker (not inside
+	the diplomacy button, whose StatePropagatorCallback forces its own state on its
+	children) and positioned from script, so it has no docking here. It is interactive: it shows its own tooltip
 	(the deal list) and forwards clicks to the diplomacy button. Text, tooltip and
 	visibility are set from script.
 	States use the vanilla button names and the badge has the vanilla "Button" callback,
 	so the engine itself switches them on mouse over and click (no script involved; the
 	game doesn't send ComponentMouseOn/Off for it): active, down_off and inactive = normal,
-	hover and down = brighter badge_hover.png, white text. Without the "Button" callback
-	the badge only followed the diplomacy button's state (its StatePropagatorCallback).
+	hover and down = brighter badge_hover.png, white text.
 	A build whose normal state was named "NewState" got stuck in "hover" after a click:
 	the engine returns to "active", which didn't exist then.
 -->
@@ -45,9 +46,6 @@
 			allowhorizontalresize="false"
 			allowverticalresize="false"
 			visible="false"
-			docking="Bottom Right"
-			dock_offset="23.00,13.00"
-			component_anchor_point="1.00,1.00"
 			tooltipslocalised="true"
 			uniqueguid="730AD4C6-7524-4E0F-BB069E08C1C863E4"
 			currentstate="A594F682-1271-48CE-91099ADB2C23CBD0"

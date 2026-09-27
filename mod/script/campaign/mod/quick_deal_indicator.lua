@@ -15,6 +15,15 @@ local DIPLOMACY_PANEL = "diplomacy_dropdown"
 local MIN_SCORE = 0
 local BADGE_NAME = "quick_deal_indicator_badge"
 local BADGE_LAYOUT = "ui/quick_deal_indicator/badge.twui.xml"
+-- The badge's parent. Not the diplomacy button itself: its StatePropagatorCallback
+-- forces its state onto its children, so the badge couldn't show its own hover state.
+-- Not button_group_management either: its RadialList layout would place the badge like
+-- another button. faction_buttons_docker has no layout engine.
+local BADGE_PARENT = "faction_buttons_docker"
+-- Badge size and offset from the diplomacy button's bottom-right corner, as the vanilla
+-- missions badge (label_missions_count: 42x41, dock_offset 23,13, anchor 1,1).
+local BADGE_W, BADGE_H = 42, 41
+local BADGE_OFFSET_X, BADGE_OFFSET_Y = 23, 13
 -- Badge states, named like vanilla button states; with the "Button" callback in its
 -- layout the engine switches them on mouse over and click by itself (the game sends no
 -- ComponentMouseOn/Off for the badge).
@@ -156,10 +165,26 @@ local function build_tooltip(deals)
 	return common.get_localised_string(LOC_QUICK_DEAL) .. "||" .. table.concat(lines, "\n")
 end
 
---- Shows the number of factions and the deal list on our badge, or hides it at 0.
+--- Places the badge over the diplomacy button's bottom-right corner. The button's place
+-- depends on the faction's other HUD buttons (radial layout), so this runs on every
+-- refresh. Only numbers are read from the button.
+local function place_badge(badge, button)
+	local x, y = button:Position()
+	local w, h = button:Dimensions()
+	badge:MoveTo(x + w + BADGE_OFFSET_X - BADGE_W, y + h + BADGE_OFFSET_Y - BADGE_H)
+end
+
+--- Shows the number of factions and the deal list on our badge, or hides it at 0 or
+-- when the diplomacy button itself is hidden.
 local function update_badge(button, deals, faction_count)
-	local badge = core:get_or_create_component(BADGE_NAME, BADGE_LAYOUT, button)
-	if faction_count > 0 then
+	local parent = find_uicomponent(core:get_ui_root(), BADGE_PARENT)
+	if not parent then
+		log(BADGE_PARENT .. " not found, HUD not updated")
+		return
+	end
+	local badge = core:get_or_create_component(BADGE_NAME, BADGE_LAYOUT, parent)
+	if faction_count > 0 and button:Visible() then
+		place_badge(badge, button)
 		-- SetStateText only changes the current state: set every state, then go back to
 		-- the normal one (its current state isn't read: no text is read from components).
 		for _, state in ipairs(BADGE_STATES) do
