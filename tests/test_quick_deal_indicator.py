@@ -153,12 +153,12 @@ class ScanTests(ModTestCase):
     def test_deals_that_cannot_be_issued_are_ignored(self):
         self.set_factions({"jade": {TRADE: (5.0, False)}})
         self.load_mod()
-        self.assertIsNone(self.badge_count())
+        self.assertEqual(self.badge_count(), "0")
 
     def test_dead_factions_are_ignored(self):
         self.set_factions({"jade": {"dead": True, TRADE: (5.0, True)}})
         self.load_mod()
-        self.assertIsNone(self.badge_count())
+        self.assertEqual(self.badge_count(), "0")
 
     def test_at_war_peace_deal_counts(self):
         self.set_factions({"nomads": {PEACE: (35.73, True)}})
@@ -168,10 +168,10 @@ class ScanTests(ModTestCase):
 
 
 class BadgeTests(ModTestCase):
-    def test_hidden_when_no_deal(self):
+    def test_shows_zero_when_no_deal(self):
         self.set_factions({"jade": {TRADE: (-1.0, True)}})
         self.load_mod()
-        self.assertIsNone(self.badge_count())
+        self.assertEqual(self.badge_count(), "0")
 
     def test_created_once_from_the_mod_layout(self):
         self.set_factions({"jade": {TRADE: (1.0, True)}})
@@ -282,6 +282,11 @@ class BadgeTooltipTests(ModTestCase):
         self.set_factions({"jade": {TRADE: (3.0, True)}})
         self.panel_closed("diplomacy_dropdown")
         self.assertEqual(self.badge().tooltip, "Quick Deal||The Jade Court - Trade Agreement (3.0)")
+
+    def test_title_only_when_no_deal(self):
+        self.set_factions({"jade": {TRADE: (-1.0, True)}})
+        self.load_mod()
+        self.assertEqual(self.badge().tooltip, "Quick Deal")
 
     def test_uses_game_language_strings(self):
         self.set_loc({
@@ -414,6 +419,16 @@ class BadgeClickTests(ModTestCase):
         self.assertIn("[QDI] click flow finished: gave up waiting at stage 'quick deal'", self.logs())
         self.assertNoErrors()
 
+    def test_click_at_zero_opens_quick_deal_with_default_deal_type(self):
+        self.set_factions({"jade": {TRADE: (-1.0, True)}})
+        self.panel_closed("technology_panel")
+        self.assertEqual(self.badge_count(), "0")
+        self.click()
+        self.mock.run_real_callbacks()
+        self.assertEqual(self.mock.quick_deal_button.clicks, 1)
+        self.assertIn("[QDI] click flow finished: no deal type to select", self.logs())
+        self.assertNoErrors()
+
     def test_other_component_clicks_are_ignored(self):
         self.click("button_missions")
         self.mock.run_real_callbacks()
@@ -438,7 +453,7 @@ class RefreshTests(ModTestCase):
         super().setUp()
         self.set_factions({"jade": {TRADE: (-1.0, True)}})
         self.load_mod()
-        self.assertIsNone(self.badge_count())
+        self.assertEqual(self.badge_count(), "0")
         self.set_factions({"jade": {TRADE: (1.0, True)}})
 
     def test_local_turn_start_refreshes(self):
@@ -447,7 +462,7 @@ class RefreshTests(ModTestCase):
 
     def test_other_human_turn_start_is_ignored(self):
         self.turn_start("other_human")
-        self.assertIsNone(self.badge_count())
+        self.assertEqual(self.badge_count(), "0")
 
     def test_diplomacy_closed_refreshes(self):
         self.panel_closed("diplomacy_dropdown")
@@ -463,7 +478,7 @@ class RefreshTests(ModTestCase):
             with self.subTest(event=event):
                 self.set_factions({"jade": {TRADE: (-1.0, True)}})
                 self.game_event(event)
-                self.assertIsNone(self.badge_count())
+                self.assertEqual(self.badge_count(), "0")
                 self.set_factions({"jade": {TRADE: (1.0, True)}})
                 self.game_event(event)
                 self.assertEqual(self.badge_count(), "1")
@@ -472,7 +487,7 @@ class RefreshTests(ModTestCase):
         self.mock.my_turn = False
         self.game_event("BattleCompleted")
         self.panel_closed("diplomacy_dropdown")
-        self.assertIsNone(self.badge_count())
+        self.assertEqual(self.badge_count(), "0")
 
     def test_events_close_together_give_a_single_scan(self):
         before = self.refresh_count()

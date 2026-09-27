@@ -162,7 +162,11 @@ local function build_tooltip(deals)
 			common.get_localised_string(LOC_OPTION_PREFIX .. deal.option),
 			deal.score))
 	end
-	return common.get_localised_string(LOC_QUICK_DEAL) .. "||" .. table.concat(lines, "\n")
+	local title = common.get_localised_string(LOC_QUICK_DEAL)
+	if #lines == 0 then
+		return title
+	end
+	return title .. "||" .. table.concat(lines, "\n")
 end
 
 --- Places the badge over the diplomacy button's bottom-right corner. The button's place
@@ -174,8 +178,8 @@ local function place_badge(badge, button)
 	badge:MoveTo(x + w + BADGE_OFFSET_X - BADGE_W, y + h + BADGE_OFFSET_Y - BADGE_H)
 end
 
---- Shows the number of factions and the deal list on our badge, or hides it at 0 or
--- when the diplomacy button itself is hidden.
+--- Shows the number of factions (0 included) and the deal list on our badge; hides it
+-- only when the diplomacy button itself is hidden.
 local function update_badge(button, deals, faction_count)
 	local parent = find_uicomponent(core:get_ui_root(), BADGE_PARENT)
 	if not parent then
@@ -183,7 +187,7 @@ local function update_badge(button, deals, faction_count)
 		return
 	end
 	local badge = core:get_or_create_component(BADGE_NAME, BADGE_LAYOUT, parent)
-	if faction_count > 0 and button:Visible() then
+	if button:Visible() then
 		place_badge(badge, button)
 		find_uicomponent(badge, BADGE_COUNT):SetStateText(tostring(faction_count))
 		badge:SetTooltipText(build_tooltip(deals), true)

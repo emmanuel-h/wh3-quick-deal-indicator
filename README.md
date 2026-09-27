@@ -73,8 +73,8 @@ score is ≥ 0.
 
 - **Badge** — `ui/quick_deal_indicator/badge.twui.xml` is a copy of the vanilla missions
   counter (`hud_campaign.twui.xml > label_missions_count`) without its context callbacks.
-  It shows the number of **factions** with at least one deal ≥ 0, and is hidden at 0 or
-  when the diplomacy button itself is hidden. It is created with
+  It shows the number of **factions** with at least one deal ≥ 0 (0 included), and is
+  hidden only when the diplomacy button itself is hidden. It is created with
   `core:get_or_create_component` under `faction_buttons_docker`, *not* inside
   `button_diplomacy`: that button's `StatePropagatorCallback` forces its own state on its
   children, so the badge could never show its own hover state (it only lit up when the
@@ -268,7 +268,7 @@ python -m unittest discover -s tests -v
 calling any `cm`, `core` or `common` function that isn't faked fails the test, which
 guards against the mod accidentally using an API that changes the game state. The suite
 checks that both scripts compile, the ≥ 0 rule, `can_issue` and dead-faction filtering,
-the badge (count on every state, hidden at 0, created once, layout states), the badge
+the badge (count, shows 0, created once, placement, layout), the badge
 tooltip (content, order, localised strings), the click flow (Quick Deal pressed once,
 never toggled off, request expiry, manual openings untouched, first deal type in screen
 order, matching by id, game button tooltips never read, unknown buttons left alone), that
@@ -356,7 +356,9 @@ create the debug file, then:
    updates (`refresh (diplomacy closed)` in the log).
 8. **Turn start** — end the turn: a `refresh (turn start)` block appears, and nothing
    flashes on screen.
-9. **Zero case** — with no deal ≥ 0, no badge.
+9. **Zero case** — with no deal ≥ 0, the badge shows 0; its tooltip is just the
+   "Quick Deal" title; clicking it opens the Quick Deal view with the game's default
+   deal type.
 10. **French** — set the game language to French: the badge tooltip is in French.
 11. **Multiplayer** — play a few co-op turns with both players running the mod: no
    desync, and each player sees only their own deals.

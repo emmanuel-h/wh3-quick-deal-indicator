@@ -237,7 +237,7 @@ To uninstall completely: untick it in the launcher and delete
 
 | Symptom | Likely cause | What to do |
 |---|---|---|
-| No badge at all | No deal ≥ 0 right now (normal), or the mod isn't loaded | Check the debug log: `0 deal(s)` is normal. Otherwise section 2.1 |
+| No badge at all | The mod isn't loaded (the badge shows 0 when there's no deal), or the diplomacy button is hidden | Section 2.1 |
 | Badge number doesn't match the diplomacy screen | The screen changed since the last refresh (the mod refreshes on load, turn start and when diplomacy closes) | Open and close diplomacy, compare again. Still wrong → section 3 |
 | Clicking the badge does nothing | The game didn't deliver the click to the badge | Check the debug log for `badge clicked`. Missing → report it; click the button outside the badge meanwhile |
 | Quick Deal view opens on the wrong deal type | The game renamed its deal-type buttons | The log shows `no deal type button ...`. Report it with that part of the log |
