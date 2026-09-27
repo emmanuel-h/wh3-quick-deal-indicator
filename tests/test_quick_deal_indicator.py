@@ -186,7 +186,7 @@ class BadgeTests(ModTestCase):
         self.set_factions({"jade": {TRADE: (1.0, True)}, "custodians": {NAP: (2.0, True)}})
         self.load_mod()
         badge = self.badge()
-        for state in ("active", "hover", "down", "down_off"):
+        for state in ("active", "hover", "down", "down_off", "inactive"):
             self.assertEqual(badge.state_texts[state], "2", state)
         self.assertEqual(badge.state, "active")
         self.assertNoErrors()
@@ -196,7 +196,9 @@ class BadgeTests(ModTestCase):
         tree = ET.parse(ROOT / "mod" / "ui" / "quick_deal_indicator" / "badge.twui.xml")
         badge = tree.getroot().find("components/qdi_badge")
         states = {st.get("name"): st for st in badge.find("states")}
-        self.assertEqual(sorted(states), ["active", "down", "down_off", "hover"])
+        self.assertEqual(sorted(states), ["active", "down", "down_off", "hover", "inactive"])
+        callbacks = [c.get("callback_id") for c in badge.find("callbackwithcontextlist")]
+        self.assertEqual(callbacks, ["Button"])
         self.assertEqual(badge.get("currentstate"), states["active"].get("this"))
         images = {img.get("this"): img.get("imagepath") for img in badge.find("componentimages")}
         used = {name: images[st.find("imagemetrics/image").get("componentimage")] for name, st in states.items()}

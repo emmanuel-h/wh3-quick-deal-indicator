@@ -5,9 +5,11 @@
 	docking) without its context callbacks. It is interactive: it shows its own tooltip
 	(the deal list) and forwards clicks to the diplomacy button. Text, tooltip and
 	visibility are set from script.
-	States use the vanilla button names so the engine itself switches them on mouse over
-	and click (no script involved; the game doesn't send ComponentMouseOn/Off for it):
-	active and down_off = normal, hover and down = brighter badge_hover.png, white text.
+	States use the vanilla button names and the badge has the vanilla "Button" callback,
+	so the engine itself switches them on mouse over and click (no script involved; the
+	game doesn't send ComponentMouseOn/Off for it): active, down_off and inactive = normal,
+	hover and down = brighter badge_hover.png, white text. Without the "Button" callback
+	the badge only followed the diplomacy button's state (its StatePropagatorCallback).
 	A build whose normal state was named "NewState" got stuck in "hover" after a click:
 	the engine returns to "active", which didn't exist then.
 -->
@@ -50,6 +52,9 @@
 			uniqueguid="730AD4C6-7524-4E0F-BB069E08C1C863E4"
 			currentstate="A594F682-1271-48CE-91099ADB2C23CBD0"
 			defaultstate="A594F682-1271-48CE-91099ADB2C23CBD0">
+			<callbackwithcontextlist>
+				<callback_with_context callback_id="Button"/>
+			</callbackwithcontextlist>
 			<componentimages>
 				<component_image
 					this="285A5986-41AA-4865-BB47B00BBF0574F9"
@@ -181,6 +186,36 @@
 						text_shader_name="text_outline_t0"
 						textshadervars="0.00,0.00,0.00,1.00"/>
 				</down_off>
+				<inactive
+					this="914E21B3-5B70-4084-A63347EBBEDEF46E"
+					name="inactive"
+					width="42"
+					height="41"
+					interactive="true"
+					uniqueguid="914E21B3-5B70-4084-A63347EBBEDEF46E">
+					<imagemetrics>
+						<image
+							this="0FA44187-F592-42BC-998C809355B6CE6D"
+							uniqueguid="0FA44187-F592-42BC-998C809355B6CE6D"
+							componentimage="285A5986-41AA-4865-BB47B00BBF0574F9"
+							offset="0.00,-1.00"
+							width="42"
+							height="41"
+							dockpoint="Center"
+							dock_offset="0.00,-1.00"
+							rotation_angle="1.48352981"/>
+					</imagemetrics>
+					<component_text
+						text="0"
+						texthalign="Center"
+						textyoffset="13.00,0.00"
+						texthbehaviour="Never split"
+						font_m_colour="#FFF8D7FF"
+						font_m_leading="3"
+						fontcat_name="body_10"
+						text_shader_name="text_outline_t0"
+						textshadervars="0.00,0.00,0.00,1.00"/>
+				</inactive>
 			</states>
 		</qdi_badge>
 	</components>

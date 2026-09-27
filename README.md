@@ -77,11 +77,14 @@ score is ≥ 0.
   It is created under `faction_buttons_docker > button_diplomacy` with
   `core:get_or_create_component`, shows the number of **factions** with at least one
   deal ≥ 0, and is hidden at 0.
-- **Hover** — the badge's states use vanilla button names: `active` and `down_off`
-  (normal) and `hover` and `down` (the vanilla badge image brightened,
-  `ui/quick_deal_indicator/badge_hover.png`, with white text). The engine switches such
-  states by itself on mouse over and click; no script is involved (the game sends no
-  `ComponentMouseOn`/`Off` for the badge). The count is set on every state
+- **Hover** — the badge's states use vanilla button names: `active`, `down_off` and
+  `inactive` (normal) and `hover` and `down` (the vanilla badge image brightened,
+  `ui/quick_deal_indicator/badge_hover.png`, with white text), and its layout has the
+  vanilla `Button` callback, as in `templates/round_extra_small_button.twui.xml`. With
+  both, the engine switches the states by itself on mouse over and click; no script is
+  involved (the game sends no `ComponentMouseOn`/`Off` for the badge). Without the
+  `Button` callback the badge only lit up when hovering the diplomacy button, whose
+  `StatePropagatorCallback` copies its state to its children. The count is set on every state
   (`SetStateText` only changes the current one), then the badge is put back to
   `active`.
 - **Tooltip** — set on the badge itself (our component has no context callbacks):

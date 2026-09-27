@@ -15,9 +15,10 @@ local DIPLOMACY_PANEL = "diplomacy_dropdown"
 local MIN_SCORE = 0
 local BADGE_NAME = "quick_deal_indicator_badge"
 local BADGE_LAYOUT = "ui/quick_deal_indicator/badge.twui.xml"
--- Badge states, named like vanilla button states so the engine switches them on mouse
--- over and click by itself (the game sends no ComponentMouseOn/Off for the badge).
-local BADGE_STATES = { "active", "hover", "down", "down_off" }
+-- Badge states, named like vanilla button states; with the "Button" callback in its
+-- layout the engine switches them on mouse over and click by itself (the game sends no
+-- ComponentMouseOn/Off for the badge).
+local BADGE_STATES = { "active", "hover", "down", "down_off", "inactive" }
 local QUICK_DEAL_BUTTON_PATH = { DIPLOMACY_PANEL, "faction_panel", "faction_panel_bottom", "buttons_bl", "button_quick_deal" }
 local DEAL_TYPE_LIST_PATH = { DIPLOMACY_PANEL, "faction_panel", "list_quick_deal_buttons" }
 -- The badge click flow waits for conditions (panel opened, button present), checked
