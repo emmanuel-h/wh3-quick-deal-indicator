@@ -138,7 +138,8 @@ end
 
 --- Re-applies our section after the vanilla tooltip. The game sets the vanilla
 -- text itself (and may reset it), so this strips any previous section first.
-local function apply_tooltip(button)
+local function apply_tooltip(button, reason)
+	log("apply tooltip (" .. reason .. ")")
 	local text = button:GetTooltipText() or ""
 	local start = text:find(SECTION_START, 1, true)
 	if start then
@@ -165,7 +166,7 @@ local function refresh(reason)
 		end
 		update_badge(button, faction_count)
 		tooltip_section = build_tooltip_section(deals)
-		apply_tooltip(button)
+		apply_tooltip(button, "refresh")
 	end)
 	if not ok then
 		log("ERROR during refresh: " .. tostring(err))
@@ -213,11 +214,11 @@ local function init()
 		function()
 			local button = diplomacy_button()
 			if button then
-				apply_tooltip(button)
+				apply_tooltip(button, "hover")
 				cm:real_callback(function()
 					local later = diplomacy_button()
 					if later then
-						apply_tooltip(later)
+						apply_tooltip(later, "hover, next update")
 					end
 				end, 0, "qdi_tooltip")
 			end
