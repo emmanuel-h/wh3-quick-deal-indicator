@@ -57,7 +57,56 @@ score is ≥ 0.
 mod/                          # Files packed into quick_deal_indicator.pack
 └── script/campaign/mod/
     └── quick_deal_indicator.lua
+tools/
+├── packtool.py               # list / extract / build PFH5 packs
+└── probe/                    # Debug mod: logs every Quick Deal score to a file
 ```
+
+## Development
+
+Requirements: Python 3.14+ (for the built-in zstd module). [RPFM](https://github.com/Frodo45127/rpfm)
+is optional — handy for browsing vanilla files, but not needed to build.
+
+`GAME` below is `C:\Program Files (x86)\Steam\steamapps\common\Total War WARHAMMER III`.
+
+### Build and install
+
+```bash
+python tools/packtool.py build mod build/quick_deal_indicator.pack
+cp build/quick_deal_indicator.pack "$GAME/data/"
+```
+
+Then enable **quick_deal_indicator** in the launcher. `build/` and `*.pack` are git-ignored.
+
+### Reading vanilla files
+
+Vanilla layouts and scripts are useful references. Extract them outside the repo:
+
+```bash
+python tools/packtool.py list "$GAME/data/ui3.pack" diplomacy
+python tools/packtool.py extract "$GAME/data/ui3.pack" "hud_campaign.twui.xml" vanilla/
+python tools/packtool.py extract "$GAME/data/data_script.pack" "script\\" vanilla/
+```
+
+Useful references: `ui/campaign ui/hud_campaign.twui.xml` (HUD, diplomacy button),
+`ui/campaign ui/diplomacy_hud.twui.xml` (diplomacy screen), `script/_lib/` (script API).
+
+### Debug probe
+
+`tools/probe` is a standalone mod that appends, on campaign load and each time the
+diplomacy screen opens, every faction's Quick Deal score and `can_issue` flag for all
+nine deal types to `$GAME/quick_deal_probe.txt`. Use it to check the scores against the
+*Deal chance* column in-game.
+
+```bash
+python tools/packtool.py build tools/probe build/quick_deal_probe.pack
+cp build/quick_deal_probe.pack "$GAME/data/"
+```
+
+### Logs
+
+The game writes script loading errors to `$GAME/lua_mod_log.txt`. Messages from the mod
+go through `out()` with the `[QDI]` prefix.
 
 ## License
 
