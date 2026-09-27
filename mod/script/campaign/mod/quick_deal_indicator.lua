@@ -1,9 +1,11 @@
 -- Quick Deal Indicator
 -- Shows on the HUD diplomacy button how many factions have a Quick Deal the AI
--- would accept (deal chance >= 0).
+-- would accept (deal chance >= 0). The badge's tooltip lists the deals; clicking
+-- it opens diplomacy with the Quick Deal view enabled.
 --
 -- Never call SetTooltipText on the vanilla diplomacy button: its tooltip is driven
--- by a ContextTooltipSetter callback, and doing so crashed the game (see DEBUG.md).
+-- by a ContextTooltipSetter callback, and doing so crashed the game (see README).
+-- The tooltip lives on our own badge component instead.
 --
 -- Read-only: the mod only queries the model and changes the local player's HUD,
 -- so it is safe in multiplayer.
@@ -13,6 +15,15 @@ local DIPLOMACY_PANEL = "diplomacy_dropdown"
 local MIN_SCORE = 0
 local BADGE_NAME = "quick_deal_indicator_badge"
 local BADGE_LAYOUT = "ui/quick_deal_indicator/badge.twui.xml"
+local QUICK_DEAL_BUTTON_PATH = { DIPLOMACY_PANEL, "faction_panel", "faction_panel_bottom", "buttons_bl", "button_quick_deal" }
+
+-- All tooltip text comes from vanilla strings, so it follows the game language.
+local LOC_QUICK_DEAL = "uied_component_texts_localised_string_dy_province_owned_Text_3f0076"
+local LOC_OPTION_PREFIX = "diplomacy_quick_deal_offers_localised_quick_deal_title_"
+local LOC_FACTION_PREFIX = "factions_screen_name_"
+
+-- Set when the badge is clicked, consumed when the diplomacy panel opens.
+local quick_deal_requested = false
 
 -- Every Quick Deal offer (vanilla diplomacy_quick_deal_offers table), in the
 -- order of the buttons under the Known Factions list. Options a faction can't
@@ -105,15 +116,44 @@ local function diplomacy_button()
 	return find_uicomponent(core:get_ui_root(), "faction_buttons_docker", "button_diplomacy")
 end
 
---- Shows the number of factions on the diplomacy button, or hides the badge at 0.
-local function update_badge(button, faction_count)
+--- "Quick Deal||Faction - Deal type (chance)" lines, in the game's language.
+local function build_tooltip(deals)
+	local lines = {}
+	for _, deal in ipairs(deals) do
+		table.insert(lines, string.format("%s - %s (%.1f)",
+			common.get_localised_string(LOC_FACTION_PREFIX .. deal.faction:name()),
+			common.get_localised_string(LOC_OPTION_PREFIX .. deal.option),
+			deal.score))
+	end
+	return common.get_localised_string(LOC_QUICK_DEAL) .. "||" .. table.concat(lines, "\n")
+end
+
+--- Shows the number of factions and the deal list on our badge, or hides it at 0.
+local function update_badge(button, deals, faction_count)
 	local badge = core:get_or_create_component(BADGE_NAME, BADGE_LAYOUT, button)
 	if faction_count > 0 then
 		badge:SetStateText(tostring(faction_count))
+		badge:SetTooltipText(build_tooltip(deals), true)
 		badge:SetVisible(true)
 	else
 		badge:SetVisible(false)
 	end
+end
+
+--- Presses the diplomacy screen's Quick Deal button unless it is already on.
+local function enable_quick_deal_view()
+	local button = find_uicomponent(core:get_ui_root(), unpack(QUICK_DEAL_BUTTON_PATH))
+	if not button then
+		log("quick deal button not found")
+		return
+	end
+	local state = button:CurrentState()
+	if state:find("^selected") then
+		log("quick deal view already enabled (" .. state .. ")")
+		return
+	end
+	button:SimulateLClick()
+	log("quick deal view enabled (was " .. state .. ")")
 end
 
 local function refresh(reason)
@@ -132,7 +172,7 @@ local function refresh(reason)
 			log("diplomacy button not found, HUD not updated")
 			return
 		end
-		update_badge(button, faction_count)
+		update_badge(button, deals, faction_count)
 		log("badge updated")
 	end)
 	if not ok then
@@ -166,6 +206,51 @@ local function init()
 		end,
 		function()
 			refresh("diplomacy closed")
+		end,
+		true
+	)
+
+	-- Clicking the badge opens diplomacy (as the button would), then the Quick Deal view.
+	core:add_listener(
+		"qdi_badge_clicked",
+		"ComponentLClickUp",
+		function(context)
+			return hud_enabled and context.string == BADGE_NAME
+		end,
+		function()
+			log("badge clicked")
+			local button = diplomacy_button()
+			if button then
+				quick_deal_requested = true
+				button:SimulateLClick()
+				-- If diplomacy didn't open (e.g. button disabled), forget the request so
+				-- a later manual opening isn't affected.
+				cm:real_callback(function()
+					quick_deal_requested = false
+				end, 2000, "qdi_quick_deal_expire")
+			end
+		end,
+		true
+	)
+
+	core:add_listener(
+		"qdi_diplomacy_opened",
+		"PanelOpenedCampaign",
+		function(context)
+			return context.string == DIPLOMACY_PANEL
+		end,
+		function()
+			if not quick_deal_requested then
+				return
+			end
+			quick_deal_requested = false
+			-- Let the panel finish building before pressing its button.
+			cm:real_callback(function()
+				local ok, err = pcall(enable_quick_deal_view)
+				if not ok then
+					log("ERROR enabling quick deal view: " .. tostring(err))
+				end
+			end, 0, "qdi_quick_deal")
 		end,
 		true
 	)

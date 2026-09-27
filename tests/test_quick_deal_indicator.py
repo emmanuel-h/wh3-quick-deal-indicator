@@ -83,6 +83,13 @@ class ModTestCase(unittest.TestCase):
     def panel_closed(self, panel):
         self.fire(f'{{ string = "{panel}" }}', "PanelClosedCampaign")
 
+    def click(self, component="quick_deal_indicator_badge"):
+        self.fire(f'{{ string = "{component}" }}', "ComponentLClickUp")
+
+    def open_diplomacy_manually(self):
+        self.mock.diplomacy_open = True
+        self.fire('{ string = "diplomacy_dropdown" }', "PanelOpenedCampaign")
+
     def hover(self, component="button_diplomacy"):
         self.fire(f'{{ string = "{component}" }}', "ComponentMouseOn")
         self.mock.run_real_callbacks()
@@ -175,7 +182,8 @@ class BadgeTests(ModTestCase):
         self.assertEqual([child.tag for child in root], ["qdi_badge"])
         badge = tree.getroot().find("components/qdi_badge")
         self.assertEqual(badge.get("visible"), "false")
-        self.assertEqual(badge.find("states/newstate").get("interactive"), "false")
+        # Interactive so it shows its tooltip and receives clicks.
+        self.assertEqual(badge.find("states/newstate").get("interactive"), "true")
 
     def test_missing_hud_is_logged_not_fatal(self):
         self.mock.ui_ready = False
@@ -184,6 +192,92 @@ class BadgeTests(ModTestCase):
         self.assertIsNone(self.badge())
         self.assertTrue(any("diplomacy button not found" in line for line in self.logs()))
         self.assertNoErrors()
+
+
+class BadgeTooltipTests(ModTestCase):
+    def setUp(self):
+        super().setUp()
+        self.set_factions({
+            "jade": {TRADE: (2.18, True)},
+            "custodians": {TRADE: (2.74, True), NAP: (0.46, True)},
+        })
+
+    def test_lists_deals_sorted_by_faction_then_score(self):
+        self.load_mod()
+        self.assertEqual(self.badge().tooltip,
+                         "Quick Deal||"
+                         "The Jade Custodians - Trade Agreement (2.7)\n"
+                         "The Jade Custodians - Non-Aggression Pact (0.5)\n"
+                         "The Jade Court - Trade Agreement (2.2)")
+
+    def test_updated_on_refresh(self):
+        self.load_mod()
+        self.set_factions({"jade": {TRADE: (3.0, True)}})
+        self.panel_closed("diplomacy_dropdown")
+        self.assertEqual(self.badge().tooltip, "Quick Deal||The Jade Court - Trade Agreement (3.0)")
+
+    def test_uses_game_language_strings(self):
+        self.set_loc({
+            LOC_QUICK_DEAL: "Accord rapide",
+            "factions_screen_name_jade": "La Cour de Jade",
+            "diplomacy_quick_deal_offers_localised_quick_deal_title_" + TRADE: "Accord commercial",
+        })
+        self.set_factions({"jade": {TRADE: (2.18, True)}})
+        self.load_mod()
+        self.assertEqual(self.badge().tooltip, "Accord rapide||La Cour de Jade - Accord commercial (2.2)")
+
+
+class BadgeClickTests(ModTestCase):
+    def setUp(self):
+        super().setUp()
+        self.set_factions({"jade": {TRADE: (2.18, True)}})
+        self.load_mod()
+
+    def test_click_opens_diplomacy_then_quick_deal_view(self):
+        self.click()
+        self.assertEqual(self.mock.diplomacy_button.clicks, 1)
+        self.assertEqual(self.mock.quick_deal_button.clicks, 0, "must wait for the panel to build")
+        self.mock.run_real_callbacks()
+        self.assertEqual(self.mock.quick_deal_button.clicks, 1)
+        self.assertEqual(self.mock.quick_deal_button.state, "selected")
+        self.assertNoErrors()
+
+    def test_quick_deal_not_toggled_off_when_already_enabled(self):
+        self.mock.quick_deal_button.state = "selected_hover"
+        self.click()
+        self.mock.run_real_callbacks()
+        self.assertEqual(self.mock.quick_deal_button.clicks, 0)
+
+    def test_manual_diplomacy_opening_is_untouched(self):
+        self.open_diplomacy_manually()
+        self.mock.run_real_callbacks()
+        self.assertEqual(self.mock.quick_deal_button.clicks, 0)
+
+    def test_request_is_used_once(self):
+        self.click()
+        self.mock.run_real_callbacks()
+        self.open_diplomacy_manually()
+        self.mock.run_real_callbacks()
+        self.assertEqual(self.mock.quick_deal_button.clicks, 1)
+
+    def test_request_expires_if_diplomacy_does_not_open(self):
+        self.mock.diplomacy_button.on_click = None  # button disabled: nothing opens
+        self.click()
+        self.mock.run_real_callbacks()
+        self.open_diplomacy_manually()
+        self.mock.run_real_callbacks()
+        self.assertEqual(self.mock.quick_deal_button.clicks, 0)
+
+    def test_missing_quick_deal_button_is_logged(self):
+        self.mock.diplomacy_button.on_click = lambda *_: self.fire('{ string = "diplomacy_dropdown" }', "PanelOpenedCampaign")
+        self.click()
+        self.mock.run_real_callbacks()
+        self.assertIn("[QDI] quick deal button not found", self.logs())
+        self.assertNoErrors()
+
+    def test_other_component_clicks_are_ignored(self):
+        self.click("button_missions")
+        self.assertEqual(self.mock.diplomacy_button.clicks, 0)
 
 
 class VanillaTooltipTests(ModTestCase):

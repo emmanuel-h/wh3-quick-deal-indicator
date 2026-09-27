@@ -3,14 +3,15 @@
 A Total War: WARHAMMER III campaign mod that shows, on the HUD **Diplomacy** button
 (bottom right, above End Turn), how many factions currently have a **Quick Deal**
 the AI would accept — i.e. a *Deal chance* **≥ 0** in the diplomacy screen's
-Known Factions list. A tooltip on the badge listing each faction, deal type and chance
-is planned.
+Known Factions list. Hovering the badge lists each faction, deal type and chance;
+clicking it opens diplomacy directly on the Quick Deal view.
 
 ## Status
 
-🚧 Work in progress. Detection is validated in-game. The first build crashed the game
-(see [Known crash](#known-crash-vanilla-tooltip)); the tooltip on the vanilla button was
-removed and the badge-only build is being tested.
+🚧 Work in progress. Detection and the badge are validated in-game. The badge tooltip and
+click-to-Quick-Deal are implemented and awaiting in-game testing. An earlier build
+crashed the game; the cause is identified and removed (see
+[Known crash](#known-crash-vanilla-tooltip)).
 
 ## Installation
 
@@ -67,13 +68,19 @@ score is ≥ 0.
   counter (`hud_campaign.twui.xml > label_missions_count`) without its context callbacks.
   It is created under `faction_buttons_docker > button_diplomacy` with
   `core:get_or_create_component`, shows the number of **factions** with at least one
-  deal ≥ 0, and is hidden at 0. It is non-interactive so hovering it still hovers the
-  button.
-- **Tooltip (planned)** — on the badge itself, one line per deal:
-  `Faction - Deal type (chance)`, built only from vanilla strings (the "Quick Deal" label
-  of the diplomacy screen, `factions_screen_name_*` and
-  `diplomacy_quick_deal_offers_localised_quick_deal_title_*`) so it follows the game
-  language (English, French, …) without shipping a `.loc` file.
+  deal ≥ 0, and is hidden at 0.
+- **Tooltip** — set on the badge itself (our component has no context callbacks):
+  `Quick Deal||Faction - Deal type (chance)`, one line per deal, sorted by faction then
+  score. Built only from vanilla strings (the "Quick Deal" label of the diplomacy screen,
+  `factions_screen_name_*` and `diplomacy_quick_deal_offers_localised_quick_deal_title_*`)
+  so it follows the game language (English, French, …) without shipping a `.loc` file.
+- **Click** — the badge is interactive, so it catches clicks on that corner of the
+  button. On `ComponentLClickUp` the mod clicks the diplomacy button (`SimulateLClick`);
+  when `PanelOpenedCampaign` reports `diplomacy_dropdown`, it waits one UI update and
+  presses `diplomacy_dropdown > faction_panel > faction_panel_bottom > buttons_bl >
+  button_quick_deal`, unless that toggle is already in a `selected*` state. The deal-type
+  selection is left to the game. The request expires after 2 s, so opening diplomacy
+  normally is never affected.
 
 ### Known crash: vanilla tooltip
 
@@ -82,7 +89,8 @@ a `ContextTooltipSetter` callback (`Loc("diplomacy_button_tooltip")`) that overw
 script text. The first build set it once at load (and tried on hover) and crashed the
 game three times out of three, from ~20 s to a few minutes after loading, e.g. when
 clicking an army: access violation reading address 0 at `Warhammer3.exe+0x244e743`, main
-thread. With the HUD switched off (`quick_deal_indicator_no_hud.txt`) it didn't crash.
+thread. With the HUD switched off (`quick_deal_indicator_no_hud.txt`) it didn't crash, and a
+build that kept the badge but dropped that call didn't crash either.
 The test mocks now reject this call. Note also that `ComponentMouseOn` never reported
 `button_diplomacy` in-game, so hover code on that button never ran.
 
@@ -123,12 +131,14 @@ python -m unittest discover -s tests -v
 calling any `cm`, `core` or `common` function that isn't faked fails the test, which
 guards against the mod accidentally using an API that changes the game state. The suite
 checks that both scripts compile, the ≥ 0 rule, `can_issue` and dead-faction filtering,
-the badge (count, hidden at 0, created once), that the vanilla button's tooltip is never
-touched, which events trigger a refresh, and error handling. GitHub Actions runs the suite and a pack build on every push
+the badge (count, hidden at 0, created once), the badge tooltip (content, order,
+localised strings), the click flow (Quick Deal pressed once, never toggled off, request
+expiry, manual openings untouched), that the vanilla button's tooltip is never touched,
+which events trigger a refresh, and error handling. GitHub Actions runs the suite and a pack build on every push
 (`.github/workflows/tests.yml`).
 
-What the mocks can't prove — how the badge renders, and engine crashes — is covered by
-the in-game checklist below.
+What the mocks can't prove — how the badge renders, whether the game delivers the click
+event to it, and engine crashes — is covered by the in-game checklist below.
 
 ### Build and install
 
@@ -183,18 +193,24 @@ create the debug file, then:
 1. **Load a campaign** — the badge shows the number of factions that have a deal ≥ 0,
    or nothing if there are none. The debug log has a `refresh (campaign loaded)` block.
 2. **Compare with the game** — open diplomacy; for every deal-type button, each faction
-   whose *Deal chance* is ≥ 0 must appear in the debug log with the same value, and no
-   other.
-3. **Stability** — play normally for at least 10 minutes: hover the diplomacy button,
+   whose *Deal chance* is ≥ 0 must appear in the badge tooltip with the same value, and
+   no other.
+3. **Badge tooltip** — hover the badge: "Quick Deal" title, then one line per deal.
+4. **Badge click** — click the badge: diplomacy opens on the Known Factions list with the
+   Deal chance column (Quick Deal enabled). The log shows `badge clicked` then
+   `quick deal view enabled`. Clicking the diplomacy button outside the badge opens
+   diplomacy normally.
+5. **Stability** — play normally for at least 10 minutes: hover the diplomacy button,
    click armies and settlements, open and close panels. No crash.
-4. **Refresh on close** — sign one of the listed deals, close diplomacy: the badge
+6. **Refresh on close** — sign one of the listed deals, close diplomacy: the badge
    updates (`refresh (diplomacy closed)` in the log).
-5. **Turn start** — end the turn: a `refresh (turn start)` block appears, and nothing
+7. **Turn start** — end the turn: a `refresh (turn start)` block appears, and nothing
    flashes on screen.
-6. **Zero case** — with no deal ≥ 0, no badge.
-7. **Multiplayer** — play a few co-op turns with both players running the mod: no
+8. **Zero case** — with no deal ≥ 0, no badge.
+9. **French** — set the game language to French: the badge tooltip is in French.
+10. **Multiplayer** — play a few co-op turns with both players running the mod: no
    desync, and each player sees only their own deals.
-8. **No errors** in `lua_mod_log.txt`.
+11. **No errors** in `lua_mod_log.txt`.
 
 ## Something's wrong?
 

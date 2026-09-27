@@ -2,8 +2,9 @@
 <!--
 	Count badge shown on the HUD diplomacy button.
 	Copied from vanilla hud_campaign.twui.xml > label_missions_count (same image, font and
-	docking) without its context callbacks, and made non-interactive so the mouse still
-	reaches the diplomacy button underneath. Text and visibility are set from script.
+	docking) without its context callbacks. It is interactive: it shows its own tooltip
+	(the deal list) and forwards clicks to the diplomacy button. Text, tooltip and
+	visibility are set from script.
 -->
 <layout
 	version="142"
@@ -56,7 +57,7 @@
 					name="NewState"
 					width="42"
 					height="41"
-					interactive="false"
+					interactive="true"
 					uniqueguid="A594F682-1271-48CE-91099ADB2C23CBD0">
 					<imagemetrics>
 						<image

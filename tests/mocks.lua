@@ -65,6 +65,13 @@ local function new_component(id)
 		table.insert(c.children, child)
 		return child
 	end
+	c.state = "active"
+	c.clicks = 0
+	c.CurrentState = function() return c.state end
+	c.SimulateLClick = function()
+		c.clicks = c.clicks + 1
+		if c.on_click then c.on_click(c) end
+	end
 	c.SetStateText = function(_, text) c.state_text = text end
 	c.SetVisible = function(_, v) c.visible = v end
 	c.Visible = function() return c.visible end
@@ -84,15 +91,35 @@ mock.diplomacy_button.SetTooltipText = function()
 	error("SetTooltipText on button_diplomacy is forbidden (crashes the game)", 2)
 end
 
+-- Diplomacy screen's Quick Deal toggle; `mock.diplomacy_open` says whether it exists.
+mock.quick_deal_button = new_component("button_quick_deal")
+mock.quick_deal_button.on_click = function(c)
+	c.state = c.state:find("^selected") and "active" or "selected"
+end
+mock.diplomacy_open = false
+
 function UIComponent(c)
 	return c
 end
 
+local function path_is(path, expected)
+	if #path ~= #expected then return false end
+	for i = 1, #path do
+		if path[i] ~= expected[i] then return false end
+	end
+	return true
+end
+
 function find_uicomponent(parent, ...)
 	local path = { ... }
-	if mock.ui_ready and parent == mock.ui_root
-		and path[1] == "faction_buttons_docker" and path[2] == "button_diplomacy" and #path == 2 then
+	if not mock.ui_ready or parent ~= mock.ui_root then
+		return false
+	end
+	if path_is(path, { "faction_buttons_docker", "button_diplomacy" }) then
 		return mock.diplomacy_button
+	end
+	if mock.diplomacy_open and path_is(path, { "diplomacy_dropdown", "faction_panel", "faction_panel_bottom", "buttons_bl", "button_quick_deal" }) then
+		return mock.quick_deal_button
 	end
 	return false
 end
@@ -159,10 +186,23 @@ function mock.fire(event, context)
 	end
 end
 
-function mock.run_real_callbacks()
+-- Runs pending real callbacks whose delay is <= max_ms (all when omitted).
+function mock.run_real_callbacks(max_ms)
 	local pending = mock.real_callbacks
 	mock.real_callbacks = {}
-	for _, cb in ipairs(pending) do cb.f() end
+	for _, cb in ipairs(pending) do
+		if max_ms == nil or cb.ms <= max_ms then
+			cb.f()
+		else
+			table.insert(mock.real_callbacks, cb)
+		end
+	end
+end
+
+-- Clicking the vanilla diplomacy button opens the diplomacy panel, like in game.
+mock.diplomacy_button.on_click = function()
+	mock.diplomacy_open = true
+	mock.fire("PanelOpenedCampaign", { string = "diplomacy_dropdown" })
 end
 
 function mock.badge()
