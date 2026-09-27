@@ -78,6 +78,11 @@ end
 
 mock.ui_root = new_component("root")
 mock.diplomacy_button = new_component("button_diplomacy")
+-- The vanilla button's tooltip is driven by a ContextTooltipSetter callback;
+-- setting it from script crashed the game in testing.
+mock.diplomacy_button.SetTooltipText = function()
+	error("SetTooltipText on button_diplomacy is forbidden (crashes the game)", 2)
+end
 
 function UIComponent(c)
 	return c

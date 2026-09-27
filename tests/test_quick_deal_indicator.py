@@ -134,8 +134,7 @@ class ScanTests(ModTestCase):
         self.set_factions({"jade": {TRADE: (0.0, True)}, "nomads": {PEACE: (-0.01, True)}})
         self.load_mod()
         self.assertEqual(self.badge_count(), "1")
-        self.assertIn("The Jade Court", self.tooltip())
-        self.assertNotIn("Burning Wind Nomads", self.tooltip())
+        self.assertIn("[QDI]   jade diplomatic_option_trade_agreement 0.0", self.logs())
 
     def test_deals_that_cannot_be_issued_are_ignored(self):
         self.set_factions({"jade": {TRADE: (5.0, False)}})
@@ -151,7 +150,7 @@ class ScanTests(ModTestCase):
         self.set_factions({"nomads": {PEACE: (35.73, True)}})
         self.load_mod()
         self.assertEqual(self.badge_count(), "1")
-        self.assertIn("Burning Wind Nomads - Peace Treaty (35.7)", self.tooltip())
+        self.assertIn("[QDI]   nomads diplomatic_option_peace 35.7", self.logs())
 
 
 class BadgeTests(ModTestCase):
@@ -187,63 +186,17 @@ class BadgeTests(ModTestCase):
         self.assertNoErrors()
 
 
-class TooltipTests(ModTestCase):
-    def setUp(self):
-        super().setUp()
-        self.set_factions({
-            "jade": {TRADE: (2.18, True)},
-            "custodians": {TRADE: (2.74, True), NAP: (0.46, True)},
-        })
-
-    def expected_section(self):
-        return ("\n\n[[col:yellow]]Quick Deal[[/col]]"
-                "\nThe Jade Custodians - Trade Agreement (2.7)"
-                "\nThe Jade Custodians - Non-Aggression Pact (0.5)"
-                "\nThe Jade Court - Trade Agreement (2.2)")
-
-    def test_appended_after_vanilla_text(self):
+class VanillaTooltipTests(ModTestCase):
+    def test_vanilla_button_tooltip_is_never_touched(self):
+        # The mock raises if SetTooltipText is called on the button; errors are logged.
         self.mock.diplomacy_button.tooltip = VANILLA_TOOLTIP
-        self.load_mod()
-        self.assertEqual(self.tooltip(), VANILLA_TOOLTIP + self.expected_section())
-
-    def test_repeated_hover_does_not_duplicate(self):
-        self.mock.diplomacy_button.tooltip = VANILLA_TOOLTIP
-        self.load_mod()
-        for _ in range(3):
-            self.hover()
-        self.assertEqual(self.tooltip(), VANILLA_TOOLTIP + self.expected_section())
-
-    def test_reappended_when_game_sets_vanilla_later(self):
-        # At first tick the game hasn't set its tooltip yet (seen in-game).
-        self.load_mod()
-        self.mock.diplomacy_button.tooltip = VANILLA_TOOLTIP
-        self.hover()
-        self.assertEqual(self.tooltip(), VANILLA_TOOLTIP + self.expected_section())
-
-    def test_hover_on_other_component_is_ignored(self):
-        self.load_mod()
-        self.mock.diplomacy_button.tooltip = VANILLA_TOOLTIP
-        self.hover("button_missions")
-        self.assertEqual(self.tooltip(), VANILLA_TOOLTIP)
-
-    def test_section_removed_when_deals_disappear(self):
-        self.mock.diplomacy_button.tooltip = VANILLA_TOOLTIP
-        self.load_mod()
-        self.set_factions({"jade": {TRADE: (-3.0, True)}})
-        self.panel_closed("diplomacy_dropdown")
-        self.assertEqual(self.tooltip(), VANILLA_TOOLTIP)
-        self.assertIsNone(self.badge_count())
-
-    def test_uses_game_language_strings(self):
-        self.set_loc({
-            LOC_QUICK_DEAL: "Accord rapide",
-            "factions_screen_name_jade": "La Cour de Jade",
-            "diplomacy_quick_deal_offers_localised_quick_deal_title_" + TRADE: "Accord commercial",
-        })
         self.set_factions({"jade": {TRADE: (2.18, True)}})
         self.load_mod()
-        self.assertIn("Accord rapide", self.tooltip())
-        self.assertIn("La Cour de Jade - Accord commercial (2.2)", self.tooltip())
+        self.hover()
+        self.turn_start("player")
+        self.panel_closed("diplomacy_dropdown")
+        self.assertEqual(self.tooltip(), VANILLA_TOOLTIP)
+        self.assertNoErrors()
 
 
 class RefreshTests(ModTestCase):
