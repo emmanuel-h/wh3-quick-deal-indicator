@@ -114,7 +114,7 @@ Delete the file when you're done to turn logging off.
 If the problem only happens with the mod, find out whether it comes from the HUD part
 (badge and tooltip) or from the scan. Create an empty file named
 `quick_deal_indicator_no_hud.txt` in GAME, the same way as in 2.2. With it, the mod
-still scans and logs (its log starts with `init, HUD disabled`) but never touches the
+still scans and logs (its log starts with `init v<version>, HUD disabled`) but never touches the
 HUD. Reproduce the problem again:
 
 - The problem is gone → it comes from the badge/tooltip.
@@ -259,7 +259,8 @@ the files to whoever maintains the mod) with:
 
 1. What you did, step by step, and what happened (section 1, step 2).
 2. The result of the with/without-mod test (section 1).
-3. The game version (bottom of the launcher) and the list of other mods enabled.
+3. The game version (bottom of the launcher), the mod version (first line of the debug
+   log: `init v1.0.0, ...`) and the list of other mods enabled.
 4. `lua_mod_log.txt` and `quick_deal_indicator_debug.txt`.
 5. For a crash: the `.stack.txt`, and the time of the crash. Keep the `.mdmp`; it's
    big, attach it only if asked.

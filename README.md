@@ -10,11 +10,11 @@ has an acceptable deal. The count is kept up to date as you play.
 
 ## Status
 
-🚧 Work in progress. Validated in-game with no crash: detection, the badge (count,
-tooltip, hover glow), refresh after army moves and panels closing, and clicking the
-badge to open diplomacy on the Quick Deal view with the first available deal type
-selected. Still to test: turn start, French, multiplayer. Several builds crashed the
-game along the way; see [Known crashes](#known-crashes).
+Version 1.0.0. Validated in-game with no crash: detection, the badge (count, tooltip,
+hover glow), refresh at turn start, after army moves, diplomatic events and panels
+closing, clicking the badge to open diplomacy on the Quick Deal view with the first
+available deal type selected, and the tooltip in French. **Not tested: multiplayer.**
+Several development builds crashed the game; see [Known crashes](#known-crashes).
 
 ## Installation
 
