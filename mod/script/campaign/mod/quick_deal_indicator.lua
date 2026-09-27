@@ -1,90 +1,108 @@
--- Quick Trade Indicator
--- Shows which factions have a Quick Deal available with a score >= 0.
+-- Quick Deal Indicator
+-- Shows on the HUD diplomacy button how many factions have a Quick Deal the AI
+-- would accept (deal chance >= 0), and lists them in the button's tooltip.
 --
--- Scripts in script/campaign/mod/ are loaded automatically by the campaign
--- script environment; cm:add_first_tick_callback runs once the game is ready.
+-- Read-only: the mod only queries the model and changes the local player's HUD,
+-- so it is safe in multiplayer.
 
-local LOG_PREFIX = "[QTI] "
+local LOG_PREFIX = "[QDI] "
+local DIPLOMACY_PANEL = "diplomacy_dropdown"
+local MIN_SCORE = 0
+
+-- Every Quick Deal offer (vanilla diplomacy_quick_deal_offers table), in the
+-- order of the buttons under the Known Factions list. Options a faction can't
+-- use are reported with can_issue == false and skipped.
+local OPTIONS = {
+	"diplomatic_option_nonaggression_pact",
+	"diplomatic_option_trade_agreement",
+	"diplomatic_option_soft_access",
+	"diplomatic_option_defensive_alliance",
+	"diplomatic_option_military_alliance",
+	"diplomatic_option_peace",
+	"diplomatic_option_vassal",
+	"diplomatic_option_client_state",
+	"diplomatic_option_confederation",
+}
 
 local function log(msg)
 	out(LOG_PREFIX .. tostring(msg))
 end
 
--- UI component paths. These MUST be verified in-game with the UI inspector,
--- they are placeholders for where the diplomacy panel exposes its data.
-local UI = {
-	diplomacy_panel = "diplomacy_dropdown",
-	quick_deal_button = "button_quick_deal",   -- TODO: verify
-	deal_score_text = "deal_score",            -- TODO: verify
-}
-
-local MIN_SCORE = 0
-
--- Faction key -> score of the best Quick Deal found during the last scan.
-local quick_deal_scores = {}
-
-local function reset_scores()
-	quick_deal_scores = {}
+local function local_faction()
+	return cm:get_faction(cm:get_local_faction_name(true))
 end
 
---- Reads the score shown after a Quick Deal has been proposed.
--- @return number|nil
-local function read_current_deal_score()
-	local panel = find_uicomponent(core:get_ui_root(), UI.diplomacy_panel)
-	if not panel then
-		return nil
-	end
+--- Returns the deals the AI would accept, sorted by faction then best score:
+-- { { faction = FACTION_SCRIPT_INTERFACE, option = string, score = number }, ... }
+-- and the number of distinct factions in that list.
+local function scan()
+	local me = local_faction()
+	local deals = {}
+	local faction_count = 0
 
-	local score_uic = find_uicomponent(panel, UI.deal_score_text)
-	if not score_uic then
-		return nil
-	end
-
-	return tonumber(score_uic:GetStateText():match("-?%d+"))
-end
-
---- Returns the list of faction keys that currently have a Quick Deal with score >= MIN_SCORE.
-local function get_available_quick_deals()
-	local result = {}
-	for faction_key, score in pairs(quick_deal_scores) do
-		if score >= MIN_SCORE then
-			table.insert(result, faction_key)
+	for _, other in model_pairs(me:factions_met()) do
+		if not other:is_dead() then
+			local found = false
+			for _, option in ipairs(OPTIONS) do
+				local score, can_issue = cm:cai_evaluate_quick_deal_action(me, other, option)
+				if can_issue and score >= MIN_SCORE then
+					table.insert(deals, { faction = other, option = option, score = score })
+					found = true
+				end
+			end
+			if found then
+				faction_count = faction_count + 1
+			end
 		end
 	end
-	table.sort(result)
-	return result
+
+	table.sort(deals, function(a, b)
+		if a.faction:name() ~= b.faction:name() then
+			return a.faction:name() < b.faction:name()
+		end
+		return a.score > b.score
+	end)
+
+	return deals, faction_count
 end
 
-local function on_diplomacy_opened()
-	reset_scores()
-	log("Diplomacy panel opened, scanning factions")
-	-- TODO: iterate the faction list, select each faction, press the Quick Deal
-	-- button, read the score with read_current_deal_score(), store it in
-	-- quick_deal_scores, then decorate the faction rows whose score >= MIN_SCORE.
+local function refresh(reason)
+	local ok, err = pcall(function()
+		local deals, faction_count = scan()
+		log(string.format("refresh (%s): %d deal(s) with %d faction(s)", reason, #deals, faction_count))
+		for _, deal in ipairs(deals) do
+			log(string.format("  %s %s %.1f", deal.faction:name(), deal.option, deal.score))
+		end
+	end)
+	if not ok then
+		log("ERROR during refresh: " .. tostring(err))
+	end
 end
 
 local function init()
-	log("Initialising")
+	-- Loading a save mid-turn: show the current state straight away.
+	refresh("campaign loaded")
 
 	core:add_listener(
-		"qti_diplomacy_opened",
-		"PanelOpenedCampaign",
+		"qdi_turn_start",
+		"ScriptEventHumanFactionTurnStart",
 		function(context)
-			return context.string == UI.diplomacy_panel
+			return context:faction():name() == cm:get_local_faction_name(true)
 		end,
-		on_diplomacy_opened,
+		function()
+			refresh("turn start")
+		end,
 		true
 	)
 
 	core:add_listener(
-		"qti_diplomacy_closed",
+		"qdi_diplomacy_closed",
 		"PanelClosedCampaign",
 		function(context)
-			return context.string == UI.diplomacy_panel
+			return context.string == DIPLOMACY_PANEL
 		end,
 		function()
-			local available = get_available_quick_deals()
-			log("Factions with a Quick Deal >= " .. MIN_SCORE .. ": " .. table.concat(available, ", "))
+			refresh("diplomacy closed")
 		end,
 		true
 	)
