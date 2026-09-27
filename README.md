@@ -8,10 +8,10 @@ clicking it opens diplomacy directly on the Quick Deal view.
 
 ## Status
 
-🚧 Work in progress. Detection and the badge are validated in-game. The badge tooltip and
-click-to-Quick-Deal are implemented and awaiting in-game testing. An earlier build
-crashed the game; the cause is identified and removed (see
-[Known crash](#known-crash-vanilla-tooltip)).
+🚧 Work in progress. Validated in-game: detection, the badge, its tooltip, and opening
+diplomacy on the Quick Deal view by clicking it, with no crash over a 10-minute session.
+Still to test: turn start, French, multiplayer. An earlier build crashed the game; the
+cause is identified and removed (see [Known crash](#known-crash-vanilla-tooltip)).
 
 ## Installation
 
