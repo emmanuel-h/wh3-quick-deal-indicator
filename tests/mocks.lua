@@ -65,7 +65,11 @@ local function new_component(id)
 		child.layout = path
 		-- Layouts start hidden (badge.twui.xml has visible="false").
 		child.visible = false
-		child.state = "NewState"
+		child.state = "active"
+		-- The mod doesn't read the state of its own badge either.
+		child.CurrentState = function()
+			error("CurrentState on the badge is forbidden", 2)
+		end
 		table.insert(c.children, child)
 		return child
 	end

@@ -111,7 +111,7 @@ class ModTestCase(unittest.TestCase):
         badge = self.badge()
         if badge is None or not badge.visible:
             return None
-        return badge.state_texts["NewState"]
+        return badge.state_texts["active"]
 
     def tooltip(self):
         return self.mock.diplomacy_button.tooltip
@@ -182,6 +182,29 @@ class BadgeTests(ModTestCase):
         self.assertEqual(len(badges), 1)
         self.assertEqual(badges[0].layout, "ui/quick_deal_indicator/badge.twui.xml")
 
+    def test_count_is_set_on_every_state_and_badge_left_normal(self):
+        self.set_factions({"jade": {TRADE: (1.0, True)}, "custodians": {NAP: (2.0, True)}})
+        self.load_mod()
+        badge = self.badge()
+        for state in ("active", "hover", "down", "down_off"):
+            self.assertEqual(badge.state_texts[state], "2", state)
+        self.assertEqual(badge.state, "active")
+        self.assertNoErrors()
+
+    def test_layout_states_match_the_script(self):
+        # The engine switches vanilla-named states by itself; they must all exist.
+        tree = ET.parse(ROOT / "mod" / "ui" / "quick_deal_indicator" / "badge.twui.xml")
+        badge = tree.getroot().find("components/qdi_badge")
+        states = {st.get("name"): st for st in badge.find("states")}
+        self.assertEqual(sorted(states), ["active", "down", "down_off", "hover"])
+        self.assertEqual(badge.get("currentstate"), states["active"].get("this"))
+        images = {img.get("this"): img.get("imagepath") for img in badge.find("componentimages")}
+        used = {name: images[st.find("imagemetrics/image").get("componentimage")] for name, st in states.items()}
+        self.assertEqual(used["hover"], "ui/quick_deal_indicator/badge_hover.png")
+        self.assertEqual(used["down"], "ui/quick_deal_indicator/badge_hover.png")
+        self.assertEqual(used["active"], "ui/skins/default/spell_dial_grudges_display.png")
+        self.assertTrue((ROOT / "mod" / "ui" / "quick_deal_indicator" / "badge_hover.png").is_file())
+
     def test_layout_is_valid_and_badge_is_first_child_of_root(self):
         # CreateComponent returns the first child of the layout's root.
         tree = ET.parse(ROOT / "mod" / "ui" / "quick_deal_indicator" / "badge.twui.xml")
@@ -190,7 +213,7 @@ class BadgeTests(ModTestCase):
         badge = tree.getroot().find("components/qdi_badge")
         self.assertEqual(badge.get("visible"), "false")
         # Interactive so it shows its tooltip and receives clicks.
-        self.assertEqual(badge.find("states/newstate").get("interactive"), "true")
+        self.assertEqual(badge.find("states/active").get("interactive"), "true")
 
     def test_missing_hud_is_logged_not_fatal(self):
         self.mock.ui_ready = False

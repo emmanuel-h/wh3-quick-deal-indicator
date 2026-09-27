@@ -15,6 +15,9 @@ local DIPLOMACY_PANEL = "diplomacy_dropdown"
 local MIN_SCORE = 0
 local BADGE_NAME = "quick_deal_indicator_badge"
 local BADGE_LAYOUT = "ui/quick_deal_indicator/badge.twui.xml"
+-- Badge states, named like vanilla button states so the engine switches them on mouse
+-- over and click by itself (the game sends no ComponentMouseOn/Off for the badge).
+local BADGE_STATES = { "active", "hover", "down", "down_off" }
 local QUICK_DEAL_BUTTON_PATH = { DIPLOMACY_PANEL, "faction_panel", "faction_panel_bottom", "buttons_bl", "button_quick_deal" }
 local DEAL_TYPE_LIST_PATH = { DIPLOMACY_PANEL, "faction_panel", "list_quick_deal_buttons" }
 -- The badge click flow waits for conditions (panel opened, button present), checked
@@ -156,7 +159,13 @@ end
 local function update_badge(button, deals, faction_count)
 	local badge = core:get_or_create_component(BADGE_NAME, BADGE_LAYOUT, button)
 	if faction_count > 0 then
-		badge:SetStateText(tostring(faction_count))
+		-- SetStateText only changes the current state: set every state, then go back to
+		-- the normal one (its current state isn't read: no text is read from components).
+		for _, state in ipairs(BADGE_STATES) do
+			badge:SetState(state)
+			badge:SetStateText(tostring(faction_count))
+		end
+		badge:SetState("active")
 		badge:SetTooltipText(build_tooltip(deals), true)
 		badge:SetVisible(true)
 	else

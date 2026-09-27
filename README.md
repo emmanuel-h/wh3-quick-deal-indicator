@@ -3,19 +3,19 @@
 A Total War: WARHAMMER III campaign mod that shows, on the HUD **Diplomacy** button
 (bottom right, above End Turn), how many factions currently have a **Quick Deal**
 the AI would accept — i.e. a *Deal chance* **≥ 0** in the diplomacy screen's
-Known Factions list. Hovering the badge lists each faction, deal type and chance;
+Known Factions list. Hovering the badge lights it up and lists each faction, deal type
+and chance;
 clicking it opens diplomacy directly on the Quick Deal view, on the first deal type that
 has an acceptable deal. The count is kept up to date as you play.
 
 ## Status
 
-🚧 Work in progress. Validated in-game, with no crash over 10-minute sessions: detection,
-the badge and its tooltip, clicking it to open diplomacy on the Quick Deal view with the
-first available deal type selected, and refreshing when a panel closes. Refresh after army
-moves is confirmed too. Under investigation: the badge click flow stalled the script
-and crashed the game (see [Known crashes](#known-crashes) §3); a redesigned flow is
-awaiting in-game testing. Still to test: turn start,
-French, multiplayer. A hover highlight is postponed.
+🚧 Work in progress. Validated in-game with no crash: detection, the badge and its
+tooltip, refresh after army moves and panels closing, and clicking the badge to open
+diplomacy on the Quick Deal view with the first available deal type selected.
+Implemented, awaiting in-game testing: the badge lighting up on hover. Still to test:
+turn start, French, multiplayer. Several builds crashed the game along the way; see
+[Known crashes](#known-crashes).
 
 ## Installation
 
@@ -76,8 +76,14 @@ score is ≥ 0.
   counter (`hud_campaign.twui.xml > label_missions_count`) without its context callbacks.
   It is created under `faction_buttons_docker > button_diplomacy` with
   `core:get_or_create_component`, shows the number of **factions** with at least one
-  deal ≥ 0, and is hidden at 0. It has a single state (see
-  [Known crashes](#known-crashes)).
+  deal ≥ 0, and is hidden at 0.
+- **Hover** — the badge's states use vanilla button names: `active` and `down_off`
+  (normal) and `hover` and `down` (the vanilla badge image brightened,
+  `ui/quick_deal_indicator/badge_hover.png`, with white text). The engine switches such
+  states by itself on mouse over and click; no script is involved (the game sends no
+  `ComponentMouseOn`/`Off` for the badge). The count is set on every state
+  (`SetStateText` only changes the current one), then the badge is put back to
+  `active`.
 - **Tooltip** — set on the badge itself (our component has no context callbacks):
   `Quick Deal||Faction - Deal type (chance)`, one line per deal, sorted by faction then
   score. Built only from vanilla strings (the "Quick Deal" label of the diplomacy screen,
@@ -195,8 +201,16 @@ in between (checking the string). The game then crashed at `Warhammer3.exe+0x244
 next to the usual address. A script dying in plain Lua right after using a string
 returned by a game component, plus earlier signs (a state printed as `selected` that
 didn't match `^selected`; crash 2 while reading `GetTooltipText` strings), point to
-strings returned by game components being unsafe to use. Not proven. The mod now reads
-no text from game components at all (see the Click description above).
+strings returned by game components being unsafe to use. The mod now reads no text
+from game components at all (see the Click description above). With that change the
+whole flow ran without a stall or crash, heartbeats continued, so this is the best
+explanation so far. (`Id()` seems fine: vanilla `get_or_create_component` reads the ids
+of the diplomacy button's children on every refresh, in every session.)
+
+The badge's hover look was reintroduced afterwards using vanilla state names (see HUD
+above): the stuck `hover` state in §2 came from the engine switching the badge to
+`hover` on click and then trying to return to `active`, which didn't exist (the normal
+state was named `NewState`).
 
 Also seen in-game: a deal-type button whose state was logged as `selected` didn't match
 the Lua pattern `^selected`, so it was clicked again. States are now checked with a
@@ -210,7 +224,8 @@ mod/                          # Files packed into quick_deal_indicator.pack
 ├── script/campaign/mod/
 │   └── quick_deal_indicator.lua
 └── ui/quick_deal_indicator/
-    └── badge.twui.xml
+    ├── badge.twui.xml
+    └── badge_hover.png       # brighter badge for the hover/down states
 tests/
 ├── mocks.lua                 # Fakes of the game's scripting API (cm, core, UI, loc)
 └── test_quick_deal_indicator.py
@@ -243,7 +258,7 @@ python -m unittest discover -s tests -v
 calling any `cm`, `core` or `common` function that isn't faked fails the test, which
 guards against the mod accidentally using an API that changes the game state. The suite
 checks that both scripts compile, the ≥ 0 rule, `can_issue` and dead-faction filtering,
-the badge (count, hidden at 0, created once), the badge
+the badge (count on every state, hidden at 0, created once, layout states), the badge
 tooltip (content, order, localised strings), the click flow (Quick Deal pressed once,
 never toggled off, request expiry, manual openings untouched, first deal type in screen
 order, matching by id, game button tooltips never read, unknown buttons left alone), that
@@ -309,8 +324,9 @@ create the debug file, then:
 2. **Compare with the game** — open diplomacy; for every deal-type button, each faction
    whose *Deal chance* is ≥ 0 must appear in the badge tooltip with the same value, and
    no other.
-3. **Badge tooltip** — hover the badge: the tooltip shows the "Quick Deal" title, then
-   one line per deal. The badge never stays in a different look.
+3. **Badge tooltip and hover** — hover the badge: it lights up, and the tooltip shows
+   the "Quick Deal" title, then one line per deal. Moving away restores it; after
+   clicking it and closing diplomacy it must not stay lit.
 4. **Badge click** — click the badge: diplomacy opens on the Known Factions list with the
    Deal chance column (Quick Deal enabled), with the first deal type that has a deal ≥ 0
    selected. The log shows `badge clicked, first deal type: ...`,

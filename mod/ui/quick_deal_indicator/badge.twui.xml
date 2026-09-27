@@ -5,8 +5,11 @@
 	docking) without its context callbacks. It is interactive: it shows its own tooltip
 	(the deal list) and forwards clicks to the diplomacy button. Text, tooltip and
 	visibility are set from script.
-	Single state on purpose: a second "hover" state got stuck (the game switched to it by
-	itself) in a build that also crashed; see README "Known crashes".
+	States use the vanilla button names so the engine itself switches them on mouse over
+	and click (no script involved; the game doesn't send ComponentMouseOn/Off for it):
+	active and down_off = normal, hover and down = brighter badge_hover.png, white text.
+	A build whose normal state was named "NewState" got stuck in "hover" after a click:
+	the engine returns to "active", which didn't exist then.
 -->
 <layout
 	version="142"
@@ -52,11 +55,15 @@
 					this="285A5986-41AA-4865-BB47B00BBF0574F9"
 					uniqueguid="285A5986-41AA-4865-BB47B00BBF0574F9"
 					imagepath="ui/skins/default/spell_dial_grudges_display.png"/>
+				<component_image
+					this="718D7094-43E5-446A-9F20B74F63E50FE5"
+					uniqueguid="718D7094-43E5-446A-9F20B74F63E50FE5"
+					imagepath="ui/quick_deal_indicator/badge_hover.png"/>
 			</componentimages>
 			<states>
-				<newstate
+				<active
 					this="A594F682-1271-48CE-91099ADB2C23CBD0"
-					name="NewState"
+					name="active"
 					width="42"
 					height="41"
 					interactive="true"
@@ -83,7 +90,97 @@
 						fontcat_name="body_10"
 						text_shader_name="text_outline_t0"
 						textshadervars="0.00,0.00,0.00,1.00"/>
-				</newstate>
+				</active>
+				<hover
+					this="D63C6912-05D8-41C6-B1322462A3B62A37"
+					name="hover"
+					width="42"
+					height="41"
+					interactive="true"
+					uniqueguid="D63C6912-05D8-41C6-B1322462A3B62A37">
+					<imagemetrics>
+						<image
+							this="57D8CA11-A24E-4334-8C137D5B0AB88EBA"
+							uniqueguid="57D8CA11-A24E-4334-8C137D5B0AB88EBA"
+							componentimage="718D7094-43E5-446A-9F20B74F63E50FE5"
+							offset="0.00,-1.00"
+							width="42"
+							height="41"
+							dockpoint="Center"
+							dock_offset="0.00,-1.00"
+							rotation_angle="1.48352981"/>
+					</imagemetrics>
+					<component_text
+						text="0"
+						texthalign="Center"
+						textyoffset="13.00,0.00"
+						texthbehaviour="Never split"
+						font_m_colour="#FFFFFFFF"
+						font_m_leading="3"
+						fontcat_name="body_10"
+						text_shader_name="text_outline_t0"
+						textshadervars="0.00,0.00,0.00,1.00"/>
+				</hover>
+				<down
+					this="725E74D2-7CFC-4D98-8C349EABAF28E5CD"
+					name="down"
+					width="42"
+					height="41"
+					interactive="true"
+					uniqueguid="725E74D2-7CFC-4D98-8C349EABAF28E5CD">
+					<imagemetrics>
+						<image
+							this="FA96FF1C-C4CC-4725-9B1E07FEDD25A34D"
+							uniqueguid="FA96FF1C-C4CC-4725-9B1E07FEDD25A34D"
+							componentimage="718D7094-43E5-446A-9F20B74F63E50FE5"
+							offset="0.00,-1.00"
+							width="42"
+							height="41"
+							dockpoint="Center"
+							dock_offset="0.00,-1.00"
+							rotation_angle="1.48352981"/>
+					</imagemetrics>
+					<component_text
+						text="0"
+						texthalign="Center"
+						textyoffset="13.00,0.00"
+						texthbehaviour="Never split"
+						font_m_colour="#FFFFFFFF"
+						font_m_leading="3"
+						fontcat_name="body_10"
+						text_shader_name="text_outline_t0"
+						textshadervars="0.00,0.00,0.00,1.00"/>
+				</down>
+				<down_off
+					this="18204A93-693B-40BA-9C80012D3106D6EC"
+					name="down_off"
+					width="42"
+					height="41"
+					interactive="true"
+					uniqueguid="18204A93-693B-40BA-9C80012D3106D6EC">
+					<imagemetrics>
+						<image
+							this="8AAAF8A4-D324-4445-BEC64396F5F7526B"
+							uniqueguid="8AAAF8A4-D324-4445-BEC64396F5F7526B"
+							componentimage="285A5986-41AA-4865-BB47B00BBF0574F9"
+							offset="0.00,-1.00"
+							width="42"
+							height="41"
+							dockpoint="Center"
+							dock_offset="0.00,-1.00"
+							rotation_angle="1.48352981"/>
+					</imagemetrics>
+					<component_text
+						text="0"
+						texthalign="Center"
+						textyoffset="13.00,0.00"
+						texthbehaviour="Never split"
+						font_m_colour="#FFF8D7FF"
+						font_m_leading="3"
+						fontcat_name="body_10"
+						text_shader_name="text_outline_t0"
+						textshadervars="0.00,0.00,0.00,1.00"/>
+				</down_off>
 			</states>
 		</qdi_badge>
 	</components>
