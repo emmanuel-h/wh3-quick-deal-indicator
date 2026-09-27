@@ -114,7 +114,8 @@ guards against the mod accidentally using an API that changes the game state. Th
 checks that both scripts compile, the ≥ 0 rule, `can_issue` and dead-faction filtering,
 the badge (count, hidden at 0, created once), the tooltip (appended after vanilla, no
 duplication on hover, removed at 0, localised strings), which events trigger a refresh,
-and error handling.
+and error handling. GitHub Actions runs the suite and a pack build on every push
+(`.github/workflows/tests.yml`).
 
 What the mocks can't prove — how the badge and tooltip actually render, and whether the
 game resets the tooltip — is covered by the in-game checklist below.
