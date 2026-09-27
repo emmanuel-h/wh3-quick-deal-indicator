@@ -8,6 +8,8 @@
 local LOG_PREFIX = "[QDI] "
 local DIPLOMACY_PANEL = "diplomacy_dropdown"
 local MIN_SCORE = 0
+local BADGE_NAME = "quick_deal_indicator_badge"
+local BADGE_LAYOUT = "ui/quick_deal_indicator/badge.twui.xml"
 
 -- Every Quick Deal offer (vanilla diplomacy_quick_deal_offers table), in the
 -- order of the buttons under the Known Factions list. Options a faction can't
@@ -66,6 +68,21 @@ local function scan()
 	return deals, faction_count
 end
 
+local function diplomacy_button()
+	return find_uicomponent(core:get_ui_root(), "faction_buttons_docker", "button_diplomacy")
+end
+
+--- Shows the number of factions on the diplomacy button, or hides the badge at 0.
+local function update_badge(button, faction_count)
+	local badge = core:get_or_create_component(BADGE_NAME, BADGE_LAYOUT, button)
+	if faction_count > 0 then
+		badge:SetStateText(tostring(faction_count))
+		badge:SetVisible(true)
+	else
+		badge:SetVisible(false)
+	end
+end
+
 local function refresh(reason)
 	local ok, err = pcall(function()
 		local deals, faction_count = scan()
@@ -73,6 +90,13 @@ local function refresh(reason)
 		for _, deal in ipairs(deals) do
 			log(string.format("  %s %s %.1f", deal.faction:name(), deal.option, deal.score))
 		end
+
+		local button = diplomacy_button()
+		if not button then
+			log("diplomacy button not found, HUD not updated")
+			return
+		end
+		update_badge(button, faction_count)
 	end)
 	if not ok then
 		log("ERROR during refresh: " .. tostring(err))

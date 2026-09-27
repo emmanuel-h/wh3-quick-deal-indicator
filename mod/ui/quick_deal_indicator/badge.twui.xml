@@ -1,0 +1,87 @@
+<?xml version="1.0"?>
+<!--
+	Count badge shown on the HUD diplomacy button.
+	Copied from vanilla hud_campaign.twui.xml > label_missions_count (same image, font and
+	docking) without its context callbacks, and made non-interactive so the mouse still
+	reaches the diplomacy button underneath. Text and visibility are set from script.
+-->
+<layout
+	version="142"
+	comment=""
+	precache_condition="">
+	<hierarchy>
+		<root this="F46A3241-06BB-463A-B27017E288D07E68">
+			<qdi_badge this="730AD4C6-7524-4E0F-BB069E08C1C863E4"/>
+		</root>
+	</hierarchy>
+	<components>
+		<root
+			this="F46A3241-06BB-463A-B27017E288D07E68"
+			id="root"
+			tooltipslocalised="true"
+			uniqueguid="F46A3241-06BB-463A-B27017E288D07E68"
+			currentstate="AEE9CC25-A60E-4D88-B2EEB5D6B1E9CC34"
+			defaultstate="AEE9CC25-A60E-4D88-B2EEB5D6B1E9CC34">
+			<states>
+				<default
+					this="AEE9CC25-A60E-4D88-B2EEB5D6B1E9CC34"
+					name="default"
+					width="1600"
+					height="900"
+					uniqueguid="AEE9CC25-A60E-4D88-B2EEB5D6B1E9CC34"/>
+			</states>
+		</root>
+		<qdi_badge
+			this="730AD4C6-7524-4E0F-BB069E08C1C863E4"
+			id="qdi_badge"
+			allowhorizontalresize="false"
+			allowverticalresize="false"
+			visible="false"
+			docking="Bottom Right"
+			dock_offset="23.00,13.00"
+			component_anchor_point="1.00,1.00"
+			tooltipslocalised="true"
+			uniqueguid="730AD4C6-7524-4E0F-BB069E08C1C863E4"
+			currentstate="A594F682-1271-48CE-91099ADB2C23CBD0"
+			defaultstate="A594F682-1271-48CE-91099ADB2C23CBD0">
+			<componentimages>
+				<component_image
+					this="285A5986-41AA-4865-BB47B00BBF0574F9"
+					uniqueguid="285A5986-41AA-4865-BB47B00BBF0574F9"
+					imagepath="ui/skins/default/spell_dial_grudges_display.png"/>
+			</componentimages>
+			<states>
+				<newstate
+					this="A594F682-1271-48CE-91099ADB2C23CBD0"
+					name="NewState"
+					width="42"
+					height="41"
+					interactive="false"
+					uniqueguid="A594F682-1271-48CE-91099ADB2C23CBD0">
+					<imagemetrics>
+						<image
+							this="9A942208-B6D0-4A38-950E99F31F988A9B"
+							uniqueguid="9A942208-B6D0-4A38-950E99F31F988A9B"
+							componentimage="285A5986-41AA-4865-BB47B00BBF0574F9"
+							offset="0.00,-1.00"
+							width="42"
+							height="41"
+							dockpoint="Center"
+							dock_offset="0.00,-1.00"
+							rotation_angle="1.48352981"/>
+					</imagemetrics>
+					<component_text
+						text="0"
+						texthalign="Center"
+						textyoffset="13.00,0.00"
+						texthbehaviour="Never split"
+						font_m_colour="#FFF8D7FF"
+						font_m_leading="3"
+						fontcat_name="body_10"
+						text_shader_name="text_outline_t0"
+						textshadervars="0.00,0.00,0.00,1.00"/>
+				</newstate>
+			</states>
+		</qdi_badge>
+	</components>
+</layout>
