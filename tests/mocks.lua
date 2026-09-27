@@ -66,6 +66,12 @@ local function new_component(id)
 		-- Layouts start hidden (badge.twui.xml has visible="false").
 		child.visible = false
 		child.state = "active"
+		if path == "ui/quick_deal_indicator/badge.twui.xml" then
+			-- The layout's children (see badge.twui.xml).
+			for _, id in ipairs({ "qdi_badge_glow", "qdi_badge_count" }) do
+				table.insert(child.children, new_component(id))
+			end
+		end
 		-- The mod doesn't read the state of its own badge either.
 		child.CurrentState = function()
 			error("CurrentState on the badge is forbidden", 2)
@@ -307,6 +313,16 @@ function mock.badge()
 	for _, child in ipairs(mock.docker.children) do
 		if child.id == "quick_deal_indicator_badge" then
 			return child
+		end
+	end
+	return nil
+end
+
+function mock.badge_count_text()
+	local badge = mock.badge()
+	for _, child in ipairs(badge.children) do
+		if child.id == "qdi_badge_count" then
+			return child.state_texts[child.state]
 		end
 	end
 	return nil

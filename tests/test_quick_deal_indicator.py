@@ -111,7 +111,7 @@ class ModTestCase(unittest.TestCase):
         badge = self.badge()
         if badge is None or not badge.visible:
             return None
-        return badge.state_texts["active"]
+        return self.mock.badge_count_text()
 
     def tooltip(self):
         return self.mock.diplomacy_button.tooltip
@@ -211,30 +211,35 @@ class BadgeTests(ModTestCase):
         self.panel_closed("technology_panel")
         self.assertIsNone(self.badge_count())
 
-    def test_count_is_set_on_every_state_and_badge_left_normal(self):
+    def test_count_is_shown_on_the_count_child(self):
         self.set_factions({"jade": {TRADE: (1.0, True)}, "custodians": {NAP: (2.0, True)}})
         self.load_mod()
-        badge = self.badge()
-        for state in ("active", "hover", "down", "down_off", "inactive"):
-            self.assertEqual(badge.state_texts[state], "2", state)
-        self.assertEqual(badge.state, "active")
+        self.assertEqual(self.badge_count(), "2")
+        self.assertEqual(list(self.badge().state_texts.values()), [], "no text on the disc itself")
         self.assertNoErrors()
 
-    def test_layout_states_match_the_script(self):
-        # The engine switches vanilla-named states by itself; they must all exist.
+    def test_layout_glow_follows_the_mouse_over_the_badge(self):
         tree = ET.parse(ROOT / "mod" / "ui" / "quick_deal_indicator" / "badge.twui.xml")
-        badge = tree.getroot().find("components/qdi_badge")
-        states = {st.get("name"): st for st in badge.find("states")}
-        self.assertEqual(sorted(states), ["active", "down", "down_off", "hover", "inactive"])
-        callbacks = [c.get("callback_id") for c in badge.find("callbackwithcontextlist")]
-        self.assertEqual(callbacks, ["Button"])
-        self.assertEqual(badge.get("currentstate"), states["active"].get("this"))
-        images = {img.get("this"): img.get("imagepath") for img in badge.find("componentimages")}
-        used = {name: images[st.find("imagemetrics/image").get("componentimage")] for name, st in states.items()}
-        self.assertEqual(used["hover"], "ui/quick_deal_indicator/badge_hover.png")
-        self.assertEqual(used["down"], "ui/quick_deal_indicator/badge_hover.png")
-        self.assertEqual(used["active"], "ui/skins/default/spell_dial_grudges_display.png")
+        root = tree.getroot()
+        hierarchy = root.find("hierarchy/root/qdi_badge")
+        # Draw order: glow above the disc, the number above the glow.
+        self.assertEqual([c.tag for c in hierarchy], ["qdi_badge_glow", "qdi_badge_count"])
+        comps = root.find("components")
+        glow = comps.find("qdi_badge_glow")
+        callback = glow.find("callbackwithcontextlist/callback_with_context")
+        self.assertEqual(callback.get("callback_id"), "ContextVisibilitySetter")
+        self.assertEqual(callback.get("context_function_id"),
+                         "self.ParentContext.IsMouseOver && self.ParentContext.IsDisabled == false")
+        self.assertEqual(glow.get("visible"), "false")
+        images = {i.get("this"): i.get("imagepath") for i in glow.find("componentimages")}
+        self.assertEqual(list(images.values()), ["ui/quick_deal_indicator/badge_hover.png"])
         self.assertTrue((ROOT / "mod" / "ui" / "quick_deal_indicator" / "badge_hover.png").is_file())
+        # Only the disc takes the mouse.
+        for child in ("qdi_badge_glow", "qdi_badge_count"):
+            for state in comps.find(child).find("states"):
+                self.assertNotEqual(state.get("interactive"), "true", child)
+        badge_states = comps.find("qdi_badge").find("states")
+        self.assertEqual([s.get("interactive") for s in badge_states], ["true"])
 
     def test_layout_is_valid_and_badge_is_first_child_of_root(self):
         # CreateComponent returns the first child of the layout's root.
@@ -245,6 +250,7 @@ class BadgeTests(ModTestCase):
         self.assertEqual(badge.get("visible"), "false")
         # Interactive so it shows its tooltip and receives clicks.
         self.assertEqual(badge.find("states/active").get("interactive"), "true")
+        self.assertIsNone(badge.find("callbackwithcontextlist"), "no Button callback any more")
 
     def test_missing_hud_is_logged_not_fatal(self):
         self.mock.ui_ready = False

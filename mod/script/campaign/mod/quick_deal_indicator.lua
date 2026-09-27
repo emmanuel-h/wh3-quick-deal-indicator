@@ -24,10 +24,9 @@ local BADGE_PARENT = "faction_buttons_docker"
 -- missions badge (label_missions_count: 42x41, dock_offset 23,13, anchor 1,1).
 local BADGE_W, BADGE_H = 42, 41
 local BADGE_OFFSET_X, BADGE_OFFSET_Y = 23, 13
--- Badge states, named like vanilla button states; with the "Button" callback in its
--- layout the engine switches them on mouse over and click by itself (the game sends no
--- ComponentMouseOn/Off for the badge).
-local BADGE_STATES = { "active", "hover", "down", "down_off", "inactive" }
+-- Child of the badge showing the number (see badge.twui.xml: it is drawn above the
+-- hover glow, which the engine shows while the mouse is over the badge).
+local BADGE_COUNT = "qdi_badge_count"
 local QUICK_DEAL_BUTTON_PATH = { DIPLOMACY_PANEL, "faction_panel", "faction_panel_bottom", "buttons_bl", "button_quick_deal" }
 local DEAL_TYPE_LIST_PATH = { DIPLOMACY_PANEL, "faction_panel", "list_quick_deal_buttons" }
 -- The badge click flow waits for conditions (panel opened, button present), checked
@@ -185,13 +184,7 @@ local function update_badge(button, deals, faction_count)
 	local badge = core:get_or_create_component(BADGE_NAME, BADGE_LAYOUT, parent)
 	if faction_count > 0 and button:Visible() then
 		place_badge(badge, button)
-		-- SetStateText only changes the current state: set every state, then go back to
-		-- the normal one (its current state isn't read: no text is read from components).
-		for _, state in ipairs(BADGE_STATES) do
-			badge:SetState(state)
-			badge:SetStateText(tostring(faction_count))
-		end
-		badge:SetState("active")
+		find_uicomponent(badge, BADGE_COUNT):SetStateText(tostring(faction_count))
 		badge:SetTooltipText(build_tooltip(deals), true)
 		badge:SetVisible(true)
 	else

@@ -84,14 +84,15 @@ score is ≥ 0.
   it over the button's bottom-right corner with the missions badge's geometry (42x41,
   bottom-right at the button's corner + 23,13), from the button's `Position()` and
   `Dimensions()` — the button's place depends on the faction's other HUD buttons.
-- **Hover** — the badge's states use vanilla button names: `active`, `down_off` and
-  `inactive` (normal) and `hover` and `down` (the vanilla badge image brightened,
-  `ui/quick_deal_indicator/badge_hover.png`, with white text), and its layout has the
-  vanilla `Button` callback, as in `templates/round_extra_small_button.twui.xml`. With
-  both, the engine switches the states by itself on mouse over and click; no script is
-  involved (the game sends no `ComponentMouseOn`/`Off` for the badge). The count is set on every state
-  (`SetStateText` only changes the current one), then the badge is put back to
-  `active`.
+- **Hover** — the layout has three parts: the disc (`qdi_badge`, interactive, single
+  state), a brighter disc (`qdi_badge_glow`, `ui/quick_deal_indicator/badge_hover.png`)
+  and the number on top (`qdi_badge_count`, text set from script). The glow is visible
+  only while the mouse is over the disc, through a `ContextVisibilitySetter` on
+  `self.ParentContext.IsMouseOver` — the mechanism vanilla buttons use for their hover
+  flame (`templates/square_large_text_button.twui.xml > button_flame`), evaluated by the
+  engine. Two earlier approaches failed in-game: switching states from script (the game
+  sends no `ComponentMouseOn`/`Off` for the badge), and vanilla state names with the
+  `Button` callback (the engine didn't switch the badge's states on hover).
 - **Tooltip** — set on the badge itself (our component has no context callbacks):
   `Quick Deal||Faction - Deal type (chance)`, one line per deal, sorted by faction then
   score. Built only from vanilla strings (the "Quick Deal" label of the diplomacy screen,
