@@ -81,7 +81,14 @@ class ModTestCase(unittest.TestCase):
                   "ScriptEventHumanFactionTurnStart")
 
     def panel_closed(self, panel):
+        """Closes a panel and lets the deferred refresh run."""
         self.fire(f'{{ string = "{panel}" }}', "PanelClosedCampaign")
+        self.mock.run_real_callbacks()
+
+    def game_event(self, event):
+        """Fires a model event (context unused by the mod) and lets timers run."""
+        self.fire("{}", event)
+        self.mock.run_real_callbacks()
 
     def click(self, component="quick_deal_indicator_badge"):
         self.fire(f'{{ string = "{component}" }}', "ComponentLClickUp")
@@ -104,7 +111,7 @@ class ModTestCase(unittest.TestCase):
         badge = self.badge()
         if badge is None or not badge.visible:
             return None
-        return badge.state_text
+        return badge.state_texts["NewState"]
 
     def tooltip(self):
         return self.mock.diplomacy_button.tooltip
@@ -313,9 +320,134 @@ class RefreshTests(ModTestCase):
         self.panel_closed("diplomacy_dropdown")
         self.assertEqual(self.badge_count(), "1")
 
-    def test_other_panel_closed_is_ignored(self):
+    def test_any_panel_closed_refreshes(self):
         self.panel_closed("technology_panel")
+        self.assertEqual(self.badge_count(), "1")
+
+    def test_game_events_refresh(self):
+        for event in ("CharacterFinishedMovingEvent", "BattleCompleted", "GarrisonOccupiedEvent",
+                      "RegionFactionChangeEvent", "PositiveDiplomaticEvent", "NegativeDiplomaticEvent"):
+            with self.subTest(event=event):
+                self.set_factions({"jade": {TRADE: (-1.0, True)}})
+                self.game_event(event)
+                self.assertIsNone(self.badge_count())
+                self.set_factions({"jade": {TRADE: (1.0, True)}})
+                self.game_event(event)
+                self.assertEqual(self.badge_count(), "1")
+
+    def test_no_refresh_outside_local_players_turn(self):
+        self.mock.my_turn = False
+        self.game_event("BattleCompleted")
+        self.panel_closed("diplomacy_dropdown")
         self.assertIsNone(self.badge_count())
+
+    def test_events_close_together_give_a_single_scan(self):
+        before = self.refresh_count()
+        self.fire("{}", "BattleCompleted")
+        self.fire("{}", "RegionFactionChangeEvent")
+        self.fire('{ string = "diplomacy_dropdown" }', "PanelClosedCampaign")
+        self.mock.run_real_callbacks()
+        self.assertEqual(self.refresh_count() - before, 1)
+
+    def refresh_count(self):
+        return sum(1 for line in self.logs() if line.startswith("[QDI] refresh ("))
+
+
+class BadgeHoverTests(ModTestCase):
+    def setUp(self):
+        super().setUp()
+        self.set_factions({"jade": {TRADE: (1.0, True)}, "custodians": {NAP: (2.0, True)}})
+        self.load_mod()
+
+    def test_brighter_state_while_hovered(self):
+        self.hover("quick_deal_indicator_badge")
+        self.assertEqual(self.badge().state, "hover")
+        self.fire('{ string = "quick_deal_indicator_badge" }', "ComponentMouseOff")
+        self.assertEqual(self.badge().state, "NewState")
+        self.assertNoErrors()
+
+    def test_count_is_set_on_both_states(self):
+        self.assertEqual(self.badge().state_texts["NewState"], "2")
+        self.assertEqual(self.badge().state_texts["hover"], "2")
+
+    def test_refresh_while_hovered_keeps_hover_state(self):
+        self.hover("quick_deal_indicator_badge")
+        self.panel_closed("technology_panel")
+        self.assertEqual(self.badge().state, "hover")
+
+    def test_hovering_other_components_does_nothing(self):
+        self.hover("button_missions")
+        self.assertEqual(self.badge().state, "NewState")
+
+
+class DealTypeSelectionTests(ModTestCase):
+    """Clicking the badge selects the first deal type, in screen order, with a deal >= 0."""
+
+    def add_buttons_by_id(self):
+        return {option: self.mock.add_deal_type_button(option, "")
+                for option in (NAP, TRADE, "diplomatic_option_soft_access", PEACE)}
+
+    def click_and_settle(self):
+        self.click()
+        self.mock.run_real_callbacks(0)    # quick deal button
+        self.mock.run_real_callbacks(100)  # deal type selection
+
+    def test_selects_first_type_in_screen_order(self):
+        self.set_factions({"jade": {PEACE: (5.0, True), TRADE: (1.0, True)}})
+        self.load_mod()
+        buttons = self.add_buttons_by_id()
+        self.click_and_settle()
+        self.assertEqual(buttons[TRADE].state, "selected")
+        self.assertEqual(buttons[PEACE].clicks, 0)
+        self.assertEqual(buttons[NAP].clicks, 0)
+        self.assertNoErrors()
+
+    def test_non_aggression_pact_comes_first(self):
+        self.set_factions({"jade": {TRADE: (1.0, True)}, "custodians": {NAP: (0.2, True)}})
+        self.load_mod()
+        buttons = self.add_buttons_by_id()
+        self.click_and_settle()
+        self.assertEqual(buttons[NAP].state, "selected")
+
+    def test_matches_buttons_by_tooltip_without_icon_markup(self):
+        self.set_loc({"diplomacy_quick_deal_offers_localised_quick_deal_title_" + TRADE:
+                      "[[img:icon_trade_agreement]][[/img]] Trade Agreement"})
+        self.set_factions({"jade": {TRADE: (1.0, True)}})
+        self.load_mod()
+        nap = self.mock.add_deal_type_button("button_0", "Non-Aggression Pact||Offer a pact")
+        trade = self.mock.add_deal_type_button("button_1", "Trade Agreement||Offer trade")
+        self.click_and_settle()
+        self.assertEqual(trade.state, "selected")
+        self.assertEqual(nap.clicks, 0)
+
+    def test_already_selected_type_is_not_clicked(self):
+        self.set_factions({"jade": {TRADE: (1.0, True)}})
+        self.load_mod()
+        buttons = self.add_buttons_by_id()
+        buttons[TRADE].state = "selected_hover"
+        self.click_and_settle()
+        self.assertEqual(buttons[TRADE].clicks, 0)
+
+    def test_waits_for_the_list_to_be_built(self):
+        self.set_factions({"jade": {TRADE: (1.0, True)}})
+        self.load_mod()
+        buttons = self.add_buttons_by_id()
+        self.click()
+        self.mock.run_real_callbacks(0)
+        self.assertEqual(buttons[TRADE].clicks, 0)
+        self.mock.run_real_callbacks(100)
+        self.assertEqual(buttons[TRADE].clicks, 1)
+
+    def test_unknown_buttons_are_logged_and_left_alone(self):
+        self.set_factions({"jade": {TRADE: (1.0, True)}})
+        self.load_mod()
+        other = self.mock.add_deal_type_button("mystery", "Something")
+        self.click_and_settle()
+        self.assertEqual(other.clicks, 0)
+        logs = self.logs()
+        self.assertIn("[QDI]   deal type button 0: id=mystery state=active tooltip=Something", logs)
+        self.assertIn("[QDI] no deal type button matches " + TRADE + ", keeping the game's selection", logs)
+        self.assertNoErrors()
 
 
 class RobustnessTests(ModTestCase):

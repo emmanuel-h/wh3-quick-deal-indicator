@@ -16,6 +16,7 @@ mock = {
 	met = {},        -- ordered list of faction names met by the local faction
 	loc = {},        -- key -> localised string
 	ui_ready = true, -- false: find_uicomponent finds nothing
+	my_turn = true,  -- cm:is_local_players_turn()
 }
 
 local function strict(name, t)
@@ -62,17 +63,20 @@ local function new_component(id)
 		child.layout = path
 		-- Layouts start hidden (badge.twui.xml has visible="false").
 		child.visible = false
+		child.state = "NewState"
 		table.insert(c.children, child)
 		return child
 	end
 	c.state = "active"
+	c.state_texts = {}
 	c.clicks = 0
 	c.CurrentState = function() return c.state end
+	c.SetState = function(_, state) c.state = state end
 	c.SimulateLClick = function()
 		c.clicks = c.clicks + 1
 		if c.on_click then c.on_click(c) end
 	end
-	c.SetStateText = function(_, text) c.state_text = text end
+	c.SetStateText = function(_, text) c.state_texts[c.state] = text end
 	c.SetVisible = function(_, v) c.visible = v end
 	c.Visible = function() return c.visible end
 	c.GetTooltipText = function() return c.tooltip end
@@ -98,6 +102,21 @@ mock.quick_deal_button.on_click = function(c)
 end
 mock.diplomacy_open = false
 
+-- Deal-type buttons under the Known Factions list, created by the game.
+-- Tests fill it with mock.add_deal_type_button(id, tooltip).
+mock.deal_type_list = new_component("list_quick_deal_buttons")
+function mock.add_deal_type_button(id, tooltip)
+	local b = new_component(id)
+	b.tooltip = tooltip
+	b.on_click = function(c)
+		-- Radio behaviour: selecting one deselects the others.
+		for _, other in ipairs(mock.deal_type_list.children) do other.state = "active" end
+		c.state = "selected"
+	end
+	table.insert(mock.deal_type_list.children, b)
+	return b
+end
+
 function UIComponent(c)
 	return c
 end
@@ -112,8 +131,18 @@ end
 
 function find_uicomponent(parent, ...)
 	local path = { ... }
-	if not mock.ui_ready or parent ~= mock.ui_root then
+	if not mock.ui_ready then
 		return false
+	end
+	if parent ~= mock.ui_root then
+		-- Direct child lookup, e.g. our badge under the diplomacy button.
+		for _, child in ipairs(parent.children) do
+			if child.id == path[1] and #path == 1 then return child end
+		end
+		return false
+	end
+	if mock.diplomacy_open and path_is(path, { "diplomacy_dropdown", "faction_panel", "list_quick_deal_buttons" }) then
+		return mock.deal_type_list
 	end
 	if path_is(path, { "faction_buttons_docker", "button_diplomacy" }) then
 		return mock.diplomacy_button
@@ -134,6 +163,10 @@ cm = strict("cm", {
 	end,
 	get_faction = function(_, name) return faction_interface(name) end,
 	is_multiplayer = function() return mock.multiplayer end,
+	is_local_players_turn = function(_, force)
+		assert(force == true, "is_local_players_turn must be forced (multiplayer)")
+		return mock.my_turn
+	end,
 	cai_evaluate_quick_deal_action = function(_, me, other, option)
 		assert(me:name() == mock.local_faction, "evaluated for a non-local faction")
 		local entry = mock.factions[other:name()].scores[option]
@@ -180,7 +213,7 @@ end
 -- Fires an event; `context` is a table of fields/methods.
 function mock.fire(event, context)
 	for _, l in ipairs(mock.listeners) do
-		if l.event == event and l.condition(context) then
+		if l.event == event and (l.condition == true or l.condition(context)) then
 			l.callback(context)
 		end
 	end
