@@ -105,6 +105,9 @@ mod/                          # Files packed into quick_deal_indicator.pack
 tests/
 ├── mocks.lua                 # Fakes of the game's scripting API (cm, core, UI, loc)
 └── test_quick_deal_indicator.py
+workshop/
+├── description.bbcode        # Steam Workshop description, ready to paste
+└── quick_deal_indicator.png  # 256x256 Workshop preview (same name as the pack)
 tools/
 ├── packtool.py               # list / extract / build PFH5 packs
 └── probe/                    # Debug mod: logs every Quick Deal score to a file
