@@ -185,6 +185,11 @@ create the debug file, then:
    desync, and each player sees only their own deals.
 9. **No errors** in `lua_mod_log.txt`.
 
+## Something's wrong?
+
+See [DEBUG.md](DEBUG.md): a step-by-step guide to find out whether a crash comes from
+the mod, collect logs and crash files, inspect raw scores and report the problem.
+
 ## License
 
 [MIT](LICENSE)
