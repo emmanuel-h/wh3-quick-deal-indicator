@@ -1,0 +1,14 @@
+# Built packs (published via GitHub Releases instead)
+*.pack
+build/
+dist/
+
+# RPFM / editor artifacts
+*.bak
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
