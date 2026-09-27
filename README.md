@@ -1,59 +1,64 @@
-# WH3 Quick Trade Indicator
+# Quick Deal Indicator
 
-A Total War: WARHAMMER III campaign mod that tells you, at a glance, which factions
-currently have a **Quick Deal** available with a score **greater than or equal to 0**
-(i.e. a deal the AI would accept without you losing out).
-
-No more opening the diplomacy screen and clicking "Quick Deal" on every faction one by one.
+A Total War: WARHAMMER III campaign mod that shows, on the HUD **Diplomacy** button
+(bottom right, above End Turn), how many factions currently have a **Quick Deal**
+the AI would accept — i.e. a *Deal chance* **≥ 0** in the diplomacy screen's
+Known Factions list. Hovering the button lists each faction, deal type and chance.
 
 ## Status
 
-🚧 Work in progress — the scanning logic is scaffolded but the UI component paths used
-to read the Quick Deal result still need to be verified in-game (see
-[Development](#development)).
-
-## Features (planned)
-
-- Scan all factions you are in contact with when the diplomacy screen opens.
-- Highlight factions whose best Quick Deal has a score ≥ 0.
-- Optional notification at the start of your turn listing those factions.
+🚧 Work in progress. The detection method has been validated in-game (see
+[How it works](#how-it-works)); the HUD badge and tooltip are being implemented.
 
 ## Installation
 
-1. Download `wh3_quick_trade_indicator.pack` from the
-   [Releases](../../releases) page (or subscribe on the Steam Workshop once published).
-2. Copy it into `<Steam>/steamapps/common/Total War WARHAMMER III/data/`.
-3. Enable it in the game launcher's mod manager.
+1. Subscribe on the Steam Workshop (link once published), or download
+   `quick_deal_indicator.pack` from the [Releases](../../releases) page and copy it into
+   `<Steam>/steamapps/common/Total War WARHAMMER III/data/`.
+2. Enable it in the game launcher's mod manager.
 
-Save-game compatible: the mod only reads state and adds UI, it can be enabled or
-disabled mid-campaign.
+The mod only reads game state and changes your own HUD, so it is save-game compatible
+and multiplayer safe.
+
+## How it works
+
+The game exposes the AI's Quick Deal evaluation to scripts:
+
+```lua
+local score, can_issue = cm:cai_evaluate_quick_deal_action(my_faction, other_faction, "diplomatic_option_trade_agreement")
+```
+
+`score` is exactly the *Deal chance* shown in the diplomacy screen (the screen rounds
+it to one decimal); `can_issue` is `false` when that deal type isn't available with
+that faction. Vanilla uses the same call for its diplomacy missions
+(`script/campaign/_narrative/wh3_narrative_shared_chains.lua`). Because it's a script
+query, no UI has to be opened.
+
+The deal types come from the vanilla `diplomacy_quick_deal_offers` table. The six
+buttons under the Known Factions list map to:
+
+| Button | Option key |
+|---|---|
+| 1 | `diplomatic_option_nonaggression_pact` |
+| 2 | `diplomatic_option_trade_agreement` |
+| 3 | `diplomatic_option_soft_access` (military access) |
+| 4 | `diplomatic_option_defensive_alliance` |
+| 5 | `diplomatic_option_military_alliance` |
+| 6 | `diplomatic_option_peace` |
+
+`diplomatic_option_vassal`, `_client_state` and `_confederation` are also Quick Deal
+offers; they only appear for factions that can use them, so the mod checks all nine
+and keeps those where `can_issue` is true. A deal counts as available when the raw
+score is ≥ 0.
 
 ## Repository layout
 
 ```
-mod/                          # Contents of the .pack, mirrored as loose files
+mod/                          # Files packed into quick_deal_indicator.pack
 └── script/campaign/mod/
-    └── quick_trade_indicator.lua
+    └── quick_deal_indicator.lua
 ```
-
-## Development
-
-Tools:
-
-- [RPFM](https://github.com/Frodo45127/rpfm) — to build the `.pack` from the `mod/` folder.
-- The in-game UI inspector / [Mod Configuration Tool](https://steamcommunity.com/sharedfiles/filedetails/?id=2927955021)
-  console to find UI component names and test Lua live.
-
-Build:
-
-1. In RPFM, create a new pack of type **Mod** named `wh3_quick_trade_indicator.pack`.
-2. Add the `mod/` folder contents at the pack root (so the script ends up at
-   `script/campaign/mod/quick_trade_indicator.lua`).
-3. Save the pack into the game's `data/` folder and enable it in the launcher.
-
-Logging: the script writes to the standard script log (`script_log_*.txt`) with the
-`[QTI]` prefix. Enable script logging to see it.
 
 ## License
 
-TBD
+[MIT](LICENSE)
