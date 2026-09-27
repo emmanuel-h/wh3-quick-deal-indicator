@@ -22,7 +22,9 @@ local DEAL_TYPE_LIST_PATH = { DIPLOMACY_PANEL, "faction_panel", "list_quick_deal
 -- check if the diplomacy screen never shows up (e.g. the button is disabled).
 local FLOW_POLL_MS = 50
 local FLOW_TIMEOUT_MS = 10000
-local FLOW_POLL_NAME = "qdi_flow_poll"
+-- Smallest real timer: fires on the game's next UI tick. Never use 0: vanilla
+-- real_callback runs a 0 ms callback immediately, inside the caller.
+local NEXT_UPDATE_MS = 1
 
 -- Game events after which deals are re-checked (during the local player's turn),
 -- in addition to turn start and any panel closing.
@@ -44,9 +46,6 @@ local LOC_FACTION_PREFIX = "factions_screen_name_"
 -- Badge click flow in progress (nil when idle):
 -- { stage = "quick deal" | "deal type", option = string|nil, waited_ms = number }
 local flow = nil
--- True while the mod's own SimulateLClick is running. The game fires events and runs
--- due timers inside it; nothing of the flow may run then (see README, Known crashes).
-local simulating_click = false
 -- A refresh is already scheduled.
 local refresh_pending = false
 
@@ -185,17 +184,11 @@ local function first_available_option(deals)
 	return nil
 end
 
---- Clicks a component with the re-entrancy guard set.
+--- Clicks a game component, logging before and after (a click that never returns
+-- shows up as a missing "clicked" line).
 local function simulate_click(uic, what)
 	log("clicking " .. what)
-	simulating_click = true
-	local ok, err = pcall(function()
-		uic:SimulateLClick()
-	end)
-	simulating_click = false
-	if not ok then
-		error(err, 0)
-	end
+	uic:SimulateLClick()
 	log(what .. " clicked")
 end
 
@@ -214,6 +207,7 @@ local function select_deal_type(option)
 		log("no deal type button " .. option .. " (" .. list:ChildCount() .. " buttons), keeping the game's selection")
 		return
 	end
+	log("reading deal type button state")
 	local state = button:CurrentState()
 	if is_selected(state) then
 		log(string.format("deal type %s already selected (%q)", option, tostring(state)))
@@ -225,14 +219,11 @@ end
 local function stop_flow(reason)
 	log("click flow finished: " .. reason)
 	flow = nil
-	cm:remove_real_callback(FLOW_POLL_NAME)
 end
 
 --- One check of the click flow: acts only once what the current stage needs exists.
+-- Returns true when the flow should keep checking.
 local function poll_flow()
-	if not flow or simulating_click then
-		return
-	end
 	flow.waited_ms = flow.waited_ms + FLOW_POLL_MS
 	if flow.waited_ms > FLOW_TIMEOUT_MS then
 		if flow.stage == "deal type" then
@@ -245,46 +236,71 @@ local function poll_flow()
 			log("no deal type button " .. flow.option .. "; buttons found: " .. table.concat(ids, ", "))
 		end
 		stop_flow("gave up waiting at stage '" .. flow.stage .. "'")
-		return
+		return false
 	end
 
 	local root = core:get_ui_root()
 	if flow.stage == "quick deal" then
 		if not find_uicomponent(root, DIPLOMACY_PANEL) then
-			return
+			return true
 		end
 		local button = find_uicomponent(root, unpack(QUICK_DEAL_BUTTON_PATH))
 		if not button then
-			return
+			return true
 		end
 		log(string.format("quick deal button ready after %d ms", flow.waited_ms))
+		log("reading quick deal button state")
 		local state = button:CurrentState()
+		log(string.format("quick deal button state: %q", tostring(state)))
 		if is_selected(state) then
-			log(string.format("quick deal view already enabled (%q)", tostring(state)))
+			log("quick deal view already enabled")
 		else
-			simulate_click(button, string.format("quick deal button (was %q)", tostring(state)))
+			simulate_click(button, "quick deal button")
 		end
 		if not flow.option then
 			stop_flow("no deal type to select")
-			return
+			return false
 		end
 		flow.stage = "deal type"
 		flow.waited_ms = 0
-	elseif flow.stage == "deal type" then
-		local list = find_uicomponent(root, unpack(DEAL_TYPE_LIST_PATH))
-		if not list or not find_uicomponent(list, flow.option) then
-			return
-		end
-		log(string.format("deal type button ready after %d ms", flow.waited_ms))
-		select_deal_type(flow.option)
-		stop_flow("done")
+		return true
 	end
+
+	-- flow.stage == "deal type"
+	local list = find_uicomponent(root, unpack(DEAL_TYPE_LIST_PATH))
+	if not list or not find_uicomponent(list, flow.option) then
+		return true
+	end
+	log(string.format("deal type button ready after %d ms", flow.waited_ms))
+	select_deal_type(flow.option)
+	stop_flow("done")
+	return false
+end
+
+--- Schedules the next check of `this_flow` with a single-shot timer. The next check is
+-- only armed once the current one has returned, so no check can run nested inside one
+-- of the mod's own clicks (the game runs due timers inside SimulateLClick). Chained
+-- single shots also stop by themselves; vanilla remove_real_callback is avoided (it
+-- unregisters with the wrong key type and doesn't clear its table entry).
+local function schedule_poll(this_flow)
+	cm:real_callback(function()
+		if flow ~= this_flow then
+			return  -- finished or replaced by a newer click
+		end
+		local ok, keep_going = pcall(poll_flow)
+		if not ok then
+			log("ERROR in click flow: " .. tostring(keep_going))
+			stop_flow("error")
+		elseif keep_going then
+			schedule_poll(this_flow)
+		end
+	end, FLOW_POLL_MS)
 end
 
 --- Badge click: open diplomacy, then the Quick Deal view, then the deal type.
--- The diplomacy click runs from a timer (never inside the badge's UI event); the next
--- stages run from a poll that starts once that click has returned and waits for each
--- panel/button to exist, whatever the machine's speed.
+-- The diplomacy click runs on the next UI tick (never inside the badge's UI event);
+-- the checks start once that click has returned and wait for each panel/button to
+-- exist, whatever the machine's speed.
 local function start_click_flow()
 	local option = first_available_option((scan()))
 	log("badge clicked, first deal type: " .. tostring(option))
@@ -304,14 +320,8 @@ local function start_click_flow()
 			stop_flow("error")
 			return
 		end
-		cm:repeat_real_callback(function()
-			local ok_poll, err_poll = pcall(poll_flow)
-			if not ok_poll then
-				log("ERROR in click flow: " .. tostring(err_poll))
-				stop_flow("error")
-			end
-		end, FLOW_POLL_MS, FLOW_POLL_NAME)
-	end, 0, "qdi_open_diplomacy")
+		schedule_poll(this_flow)
+	end, NEXT_UPDATE_MS)
 end
 
 local function refresh(reason)

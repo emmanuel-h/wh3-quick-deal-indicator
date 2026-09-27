@@ -88,11 +88,11 @@ score is ≥ 0.
   screen's button order: non-aggression pact, trade agreement, military access,
   defensive alliance, military alliance, peace, then vassal / tributary / confederation)
   that has a deal ≥ 0. Then:
-  1. on the next UI update (a real timer, not inside the badge's UI event), click the
-     diplomacy button (`SimulateLClick`);
-  2. once that click has returned, a check runs every 50 ms (`repeat_real_callback`)
-     and acts only when what it needs exists — no fixed delay, so a slow machine just
-     waits longer:
+  1. on the next UI tick (a 1 ms real timer, so not inside the badge's UI event), click
+     the diplomacy button (`SimulateLClick`);
+  2. once that click has returned, a check runs every 50 ms (single-shot real timers,
+     each armed only after the previous check has returned) and acts only when what it
+     needs exists — no fixed delay, so a slow machine just waits longer:
      - when `diplomacy_dropdown` and its `faction_panel > faction_panel_bottom >
        buttons_bl > button_quick_deal` exist: press it, unless already selected;
      - when `faction_panel > list_quick_deal_buttons` contains the button named after
@@ -103,9 +103,10 @@ score is ≥ 0.
      diplomacy button is disabled); at the deal-type stage it then logs the button ids
      it found.
 
-  The mod's own simulated clicks run with a `simulating_click` guard: the game fires
-  events and runs due timers inside `SimulateLClick`, and the check does nothing while
-  the guard is set. A newer badge click replaces a flow in progress. Nothing listens to
+  Because each check is armed only after the previous one has returned, no check is
+  pending while one of the mod's own clicks runs — the game fires events and runs due
+  timers inside `SimulateLClick`, so this matters. A newer badge click replaces a flow
+  in progress. Nothing listens to
   `PanelOpenedCampaign`, so opening diplomacy manually is never affected. See
   [Known crashes](#known-crashes) §3 for why the flow is built this way.
 
@@ -165,9 +166,28 @@ badge stopped reacting to clicks).
 
 Fix: nothing reacts to `PanelOpenedCampaign` any more. After the diplomacy click has
 returned, a check waits for each panel/button to exist (no fixed delays, so it doesn't
-depend on the machine's speed), and is inert while one of the mod's own clicks is in
-progress (see the Click description above). Tests simulate the game running timers
-inside the clicks and check nothing runs there.
+depend on the machine's speed), and no check can be pending during one of the mod's own
+clicks (see the Click description above). Tests simulate the game running timers inside
+the clicks and check nothing runs there.
+
+Two facts from vanilla `script/_lib/lib_timer_manager.lua` explained earlier confusing
+results:
+
+- `real_callback(f, 0)` doesn't defer anything: an interval `<= 0` calls `f()`
+  immediately, inside the caller. So the earlier "deferred to the next UI update" steps
+  written with 0 ms actually ran synchronously (inside the badge's click event, or
+  nested inside the diplomacy click). The mod now uses 1 ms for "next tick", and the
+  mocks reproduce the vanilla behaviour.
+- `remove_real_callback` unregisters with a numeric id while registration used a
+  string, and clears `real_timer[id]` instead of `real_timers[id]`: cancelling doesn't
+  reliably work. The mod never uses it (chained single shots stop by themselves); the
+  mocks make any use fail.
+
+With those fixed, the next in-game run stalled at a new point: right after
+`quick deal button ready after 50 ms`, i.e. while reading the Quick Deal button's state
+(`CurrentState()`), and the game crashed later at `Warhammer3.exe+0x244e83b` (next to
+the usual address). The flow now logs a line before each call on a game component to
+pin down which call stalls, if it happens again.
 
 Also seen in-game: a deal-type button whose state was logged as `selected` didn't match
 the Lua pattern `^selected`, so it was clicked again. States are now checked with a

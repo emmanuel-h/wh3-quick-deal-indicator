@@ -244,7 +244,7 @@ class BadgeClickTests(ModTestCase):
         self.click()
         # Nothing is clicked inside the UI click handler itself.
         self.assertEqual(self.mock.diplomacy_button.clicks, 0)
-        self.mock.run_real_callbacks(0)
+        self.mock.run_real_callbacks(1)  # next UI tick
         self.assertEqual(self.mock.diplomacy_button.clicks, 1)
         self.assertEqual(self.mock.quick_deal_button.clicks, 0, "must wait for the panel to build")
         self.mock.run_real_callbacks(300)
@@ -266,7 +266,7 @@ class BadgeClickTests(ModTestCase):
 
         self.mock.diplomacy_button.on_click = click_diplomacy
         self.click()
-        self.mock.run_real_callbacks(0)
+        self.mock.run_real_callbacks(1)  # next UI tick
         self.assertEqual(steps_during_click, [0])
         self.mock.run_real_callbacks(300)
         self.assertEqual(self.mock.quick_deal_button.clicks, 1)
@@ -296,7 +296,7 @@ class BadgeClickTests(ModTestCase):
         # A slow machine: the button appears only after many checks.
         self.mock.quick_deal_ready = False
         self.click()
-        self.mock.run_real_callbacks(0)
+        self.mock.run_real_callbacks(1)  # next UI tick
         for _ in range(40):  # 40 checks of 50 ms: 2 s
             self.run_one_poll()
         self.assertEqual(self.mock.quick_deal_button.clicks, 0)
@@ -327,16 +327,20 @@ class BadgeClickTests(ModTestCase):
         self.assertEqual(self.active_polls(), [])
 
     def active_polls(self):
-        return [cb.name for cb in self.mock.repeat_callbacks.values() if not cb.removed]
+        """Pending click-flow checks (single-shot 50 ms timers)."""
+        return [cb for cb in self.mock.real_callbacks.values() if cb.ms == 50]
 
     def run_one_poll(self):
-        for cb in self.mock.repeat_callbacks.values():
-            if cb.name == "qdi_flow_poll" and not cb.removed:
-                cb.f()
+        """Fires the pending click-flow check once (it re-arms itself if needed)."""
+        pending = self.active_polls()
+        self.mock.real_callbacks = self.lua.table_from(
+            [cb for cb in self.mock.real_callbacks.values() if cb.ms != 50])
+        for cb in pending:
+            cb.f()
 
     def test_newer_click_supersedes_the_pending_flow(self):
         self.click()
-        self.mock.run_real_callbacks(0)
+        self.mock.run_real_callbacks(1)  # next UI tick
         self.click()
         self.mock.run_real_callbacks()
         self.assertEqual(self.mock.quick_deal_button.clicks, 1)
@@ -498,7 +502,7 @@ class DealTypeSelectionTests(ModTestCase):
         self.load_mod()
         buttons = self.add_buttons_by_id()
         self.click()
-        self.mock.run_real_callbacks(0)
+        self.mock.run_real_callbacks(1)  # next UI tick
         self.assertEqual(buttons[TRADE].clicks, 0)
         self.mock.run_real_callbacks(300)
         self.assertEqual(buttons[TRADE].clicks, 1)

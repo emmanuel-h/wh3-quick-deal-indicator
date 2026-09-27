@@ -185,21 +185,21 @@ cm = strict("cm", {
 		end
 		return entry[1], entry[2]
 	end,
+	-- Like vanilla timer_manager:real_callback: an interval <= 0 runs immediately.
 	real_callback = function(_, f, ms, name)
+		if ms <= 0 then
+			f()
+			return
+		end
 		table.insert(mock.real_callbacks, { f = f, ms = ms, name = name })
 	end,
 	repeat_real_callback = function(_, f, ms, name)
 		table.insert(mock.repeat_callbacks, { f = f, ms = ms, name = name })
 	end,
-	remove_real_callback = function(_, name)
-		for _, cb in ipairs(mock.repeat_callbacks) do
-			if cb.name == name then cb.removed = true end
-		end
-		local kept = {}
-		for _, cb in ipairs(mock.real_callbacks) do
-			if cb.name ~= name then table.insert(kept, cb) end
-		end
-		mock.real_callbacks = kept
+	-- Vanilla remove_real_callback unregisters with the wrong key type and doesn't clear
+	-- its table entry; the mod must not rely on it.
+	remove_real_callback = function()
+		error("remove_real_callback is buggy in vanilla, don't use it", 2)
 	end,
 })
 
