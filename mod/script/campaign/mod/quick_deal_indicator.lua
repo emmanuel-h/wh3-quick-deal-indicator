@@ -164,12 +164,6 @@ local function update_badge(button, deals, faction_count)
 	end
 end
 
---- Whether a toggle button's state is one of its "selected*" states. Tolerant on purpose:
--- in-game, a state logged as "selected" didn't match the pattern "^selected".
-local function is_selected(state)
-	return tostring(state):lower():find("selected", 1, true) ~= nil
-end
-
 --- First option, in the diplomacy screen's order, with at least one deal; nil if none.
 local function first_available_option(deals)
 	local available = {}
@@ -194,26 +188,18 @@ end
 
 --- Selects the deal-type button for `option` under the Known Factions list.
 -- The game creates these buttons with the option key as id (seen in-game, e.g.
--- "diplomatic_option_nonaggression_pact"). Only ids and states are read: reading
--- tooltips of game components is avoided (suspected in a crash, see README).
+-- "diplomatic_option_nonaggression_pact"). They behave like radio buttons: clicking the
+-- selected one keeps it selected (seen in-game), so the mod just clicks it. No text is
+-- read from game components (state and tooltip strings are suspected in the crashes,
+-- see README).
 local function select_deal_type(option)
 	local list = find_uicomponent(core:get_ui_root(), unpack(DEAL_TYPE_LIST_PATH))
-	if not list then
-		log("deal type list not found")
-		return
-	end
-	local button = find_uicomponent(list, option)
+	local button = list and find_uicomponent(list, option)
 	if not button then
-		log("no deal type button " .. option .. " (" .. list:ChildCount() .. " buttons), keeping the game's selection")
+		log("no deal type button " .. option .. ", keeping the game's selection")
 		return
 	end
-	log("reading deal type button state")
-	local state = button:CurrentState()
-	if is_selected(state) then
-		log(string.format("deal type %s already selected (%q)", option, tostring(state)))
-		return
-	end
-	simulate_click(button, string.format("deal type %s (was %q)", option, tostring(state)))
+	simulate_click(button, "deal type " .. option)
 end
 
 local function stop_flow(reason)
@@ -226,15 +212,6 @@ end
 local function poll_flow()
 	flow.waited_ms = flow.waited_ms + FLOW_POLL_MS
 	if flow.waited_ms > FLOW_TIMEOUT_MS then
-		if flow.stage == "deal type" then
-			-- Ids only: reading tooltips of game components is avoided (see README).
-			local list = find_uicomponent(core:get_ui_root(), unpack(DEAL_TYPE_LIST_PATH))
-			local ids = {}
-			for i = 0, (list and list:ChildCount() or 0) - 1 do
-				table.insert(ids, UIComponent(list:Find(i)):Id())
-			end
-			log("no deal type button " .. flow.option .. "; buttons found: " .. table.concat(ids, ", "))
-		end
 		stop_flow("gave up waiting at stage '" .. flow.stage .. "'")
 		return false
 	end
@@ -249,14 +226,9 @@ local function poll_flow()
 			return true
 		end
 		log(string.format("quick deal button ready after %d ms", flow.waited_ms))
-		log("reading quick deal button state")
-		local state = button:CurrentState()
-		log(string.format("quick deal button state: %q", tostring(state)))
-		if is_selected(state) then
-			log("quick deal view already enabled")
-		else
-			simulate_click(button, "quick deal button")
-		end
+		-- Diplomacy always opens with Quick Deal off (seen in-game), so the toggle is
+		-- clicked without reading its state (no text is read from game components).
+		simulate_click(button, "quick deal button")
 		if not flow.option then
 			stop_flow("no deal type to select")
 			return false

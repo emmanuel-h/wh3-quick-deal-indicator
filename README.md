@@ -94,14 +94,19 @@ score is ≥ 0.
      each armed only after the previous check has returned) and acts only when what it
      needs exists — no fixed delay, so a slow machine just waits longer:
      - when `diplomacy_dropdown` and its `faction_panel > faction_panel_bottom >
-       buttons_bl > button_quick_deal` exist: press it, unless already selected;
+       buttons_bl > button_quick_deal` exist: click it (diplomacy always opens with
+       Quick Deal off, seen in-game, so its state isn't read);
      - when `faction_panel > list_quick_deal_buttons` contains the button named after
        the option (the game uses the option key as id, e.g.
-       `diplomatic_option_nonaggression_pact`): select it, unless already selected.
-       Only ids and states are read.
+       `diplomatic_option_nonaggression_pact`): click it. These behave like radio
+       buttons — clicking the selected one keeps it selected (seen in-game) — so again
+       no state is read.
   3. The check stops when done, or after 10 s without the next thing appearing (e.g. the
-     diplomacy button is disabled); at the deal-type stage it then logs the button ids
-     it found.
+     diplomacy button is disabled).
+
+  The mod only *finds* game components (by name) and *clicks* them: it never reads text
+  from them (`CurrentState`, `GetTooltipText`, `Id`), see
+  [Known crashes](#known-crashes) §3. The mocks make any such read fail the tests.
 
   Because each check is armed only after the previous one has returned, no check is
   pending while one of the mod's own clicks runs — the game fires events and runs due
@@ -183,11 +188,15 @@ results:
   reliably work. The mod never uses it (chained single shots stop by themselves); the
   mocks make any use fail.
 
-With those fixed, the next in-game run stalled at a new point: right after
-`quick deal button ready after 50 ms`, i.e. while reading the Quick Deal button's state
-(`CurrentState()`), and the game crashed later at `Warhammer3.exe+0x244e83b` (next to
-the usual address). The flow now logs a line before each call on a game component to
-pin down which call stalls, if it happens again.
+With those fixed, the next in-game runs stalled right after reading the Quick Deal
+button's state: once before the log line after `CurrentState()`, once after it
+(`quick deal button state: "active"`) but before the next log line, with only plain Lua
+in between (checking the string). The game then crashed at `Warhammer3.exe+0x244e83b`,
+next to the usual address. A script dying in plain Lua right after using a string
+returned by a game component, plus earlier signs (a state printed as `selected` that
+didn't match `^selected`; crash 2 while reading `GetTooltipText` strings), point to
+strings returned by game components being unsafe to use. Not proven. The mod now reads
+no text from game components at all (see the Click description above).
 
 Also seen in-game: a deal-type button whose state was logged as `selected` didn't match
 the Lua pattern `^selected`, so it was clicked again. States are now checked with a

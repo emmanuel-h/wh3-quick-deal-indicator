@@ -97,8 +97,19 @@ mock.diplomacy_button.SetTooltipText = function()
 	error("SetTooltipText on button_diplomacy is forbidden (crashes the game)", 2)
 end
 
+-- Game components the mod must never read text from (state and tooltip strings from
+-- game components are suspected in the crashes): reading fails the test.
+local function forbid_text_reads(c)
+	for _, method in ipairs({ "CurrentState", "GetTooltipText", "Id" }) do
+		c[method] = function()
+			error(method .. " on game component " .. c.id .. " is forbidden (suspected crash)", 2)
+		end
+	end
+end
+
 -- Diplomacy screen's Quick Deal toggle; `mock.diplomacy_open` says whether it exists.
 mock.quick_deal_button = new_component("button_quick_deal")
+forbid_text_reads(mock.quick_deal_button)
 mock.quick_deal_button.on_click = function(c)
 	c.state = c.state:find("^selected") and "active" or "selected"
 end
@@ -111,12 +122,10 @@ mock.deal_type_list = new_component("list_quick_deal_buttons")
 function mock.add_deal_type_button(id, tooltip)
 	local b = new_component(id)
 	b.tooltip = tooltip
-	-- Reading tooltips of game-created components was suspected in a crash.
-	b.GetTooltipText = function()
-		error("GetTooltipText on a game deal-type button is forbidden (suspected crash)", 2)
-	end
+	forbid_text_reads(b)
 	b.on_click = function(c)
-		-- Radio behaviour: selecting one deselects the others.
+		-- Radio behaviour (seen in-game): clicking one selects it, even if it already
+		-- was, and deselects the others.
 		for _, other in ipairs(mock.deal_type_list.children) do other.state = "active" end
 		c.state = "selected"
 	end

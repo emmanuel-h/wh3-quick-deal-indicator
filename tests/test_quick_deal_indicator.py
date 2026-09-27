@@ -240,6 +240,13 @@ class BadgeClickTests(ModTestCase):
         self.set_factions({"jade": {TRADE: (2.18, True)}})
         self.load_mod()
 
+    def test_quick_deal_is_clicked_once_without_reading_its_state(self):
+        # Diplomacy always opens with Quick Deal off (seen in-game).
+        self.click()
+        self.mock.run_real_callbacks()
+        self.assertEqual(self.mock.quick_deal_button.clicks, 1)
+        self.assertNoErrors()
+
     def test_click_opens_diplomacy_then_quick_deal_view(self):
         self.click()
         # Nothing is clicked inside the UI click handler itself.
@@ -271,12 +278,6 @@ class BadgeClickTests(ModTestCase):
         self.mock.run_real_callbacks(300)
         self.assertEqual(self.mock.quick_deal_button.clicks, 1)
         self.assertNoErrors()
-
-    def test_quick_deal_not_toggled_off_when_already_enabled(self):
-        self.mock.quick_deal_button.state = "selected_hover"
-        self.click()
-        self.mock.run_real_callbacks()
-        self.assertEqual(self.mock.quick_deal_button.clicks, 0)
 
     def test_manual_diplomacy_opening_is_untouched(self):
         self.open_diplomacy_manually()
@@ -465,38 +466,6 @@ class DealTypeSelectionTests(ModTestCase):
         self.click_and_settle()
         self.assertEqual(buttons[NAP].state, "selected")
 
-    def test_already_selected_type_is_not_clicked(self):
-        self.set_factions({"jade": {TRADE: (1.0, True)}})
-        self.load_mod()
-        buttons = self.add_buttons_by_id()
-        buttons[TRADE].state = "selected_hover"
-        self.click_and_settle()
-        self.assertEqual(buttons[TRADE].clicks, 0)
-
-    # In-game, a state logged as "selected" didn't match the pattern "^selected".
-    def assert_not_clicked_when_state_is(self, state):
-        self.set_factions({"jade": {TRADE: (1.0, True)}})
-        self.load_mod()
-        buttons = self.add_buttons_by_id()
-        buttons[TRADE].state = state
-        self.click_and_settle()
-        self.assertEqual(buttons[TRADE].clicks, 0)
-
-    def test_selected_state_plain(self):
-        self.assert_not_clicked_when_state_is("selected")
-
-    def test_selected_state_with_leading_space(self):
-        self.assert_not_clicked_when_state_is(" selected")
-
-    def test_selected_state_capitalised(self):
-        self.assert_not_clicked_when_state_is("Selected")
-
-    def test_selected_state_variant(self):
-        self.assert_not_clicked_when_state_is("selected_hover")
-
-    def test_selected_state_with_trailing_nul(self):
-        self.assert_not_clicked_when_state_is("selected\x00")
-
     def test_waits_for_the_list_to_be_built(self):
         self.set_factions({"jade": {TRADE: (1.0, True)}})
         self.load_mod()
@@ -507,16 +476,29 @@ class DealTypeSelectionTests(ModTestCase):
         self.mock.run_real_callbacks(300)
         self.assertEqual(buttons[TRADE].clicks, 1)
 
-    def test_unknown_buttons_are_logged_and_left_alone(self):
+    def test_unknown_buttons_are_left_alone(self):
         self.set_factions({"jade": {TRADE: (1.0, True)}})
         self.load_mod()
         other = self.mock.add_deal_type_button("mystery", "Something")
-        self.click_and_settle()
+        self.click()
+        self.mock.run_real_callbacks()
         self.assertEqual(other.clicks, 0)
-        self.assertIn("[QDI] no deal type button " + TRADE + "; buttons found: mystery", self.logs())
+        self.assertIn("[QDI] click flow finished: gave up waiting at stage 'deal type'", self.logs())
         self.assertNoErrors()
 
-    def test_game_button_tooltips_are_never_read(self):
+    def test_selected_type_is_clicked_anyway(self):
+        # Radio buttons: clicking the selected one keeps it selected (seen in-game), so
+        # the mod doesn't read the state (text reads are suspected in the crashes).
+        self.set_factions({"jade": {NAP: (1.0, True)}})
+        self.load_mod()
+        buttons = self.add_buttons_by_id()
+        buttons[NAP].state = "selected"
+        self.click_and_settle()
+        self.assertEqual(buttons[NAP].clicks, 1)
+        self.assertEqual(buttons[NAP].state, "selected")
+        self.assertNoErrors()
+
+    def test_no_text_is_read_from_game_components(self):
         # The mock raises on GetTooltipText; any call would be logged as an error.
         self.set_factions({"jade": {TRADE: (1.0, True)}})
         self.load_mod()
