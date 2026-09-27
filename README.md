@@ -83,6 +83,9 @@ mod/                          # Files packed into quick_deal_indicator.pack
 │   └── quick_deal_indicator.lua
 └── ui/quick_deal_indicator/
     └── badge.twui.xml
+tests/
+├── mocks.lua                 # Fakes of the game's scripting API (cm, core, UI, loc)
+└── test_quick_deal_indicator.py
 tools/
 ├── packtool.py               # list / extract / build PFH5 packs
 └── probe/                    # Debug mod: logs every Quick Deal score to a file
@@ -94,6 +97,27 @@ Requirements: Python 3.14+ (for the built-in zstd module). [RPFM](https://github
 is optional — handy for browsing vanilla files, but not needed to build.
 
 `GAME` below is `C:\Program Files (x86)\Steam\steamapps\common\Total War WARHAMMER III`.
+
+### Automated tests
+
+The script is tested outside the game on a real Lua 5.1 runtime (the game's Lua version)
+through [lupa](https://pypi.org/project/lupa/):
+
+```bash
+pip install -r tests/requirements.txt
+python -m unittest discover -s tests -v
+```
+
+`tests/mocks.lua` fakes the parts of the game API the mod uses. The fakes are strict:
+calling any `cm`, `core` or `common` function that isn't faked fails the test, which
+guards against the mod accidentally using an API that changes the game state. The suite
+checks that both scripts compile, the ≥ 0 rule, `can_issue` and dead-faction filtering,
+the badge (count, hidden at 0, created once), the tooltip (appended after vanilla, no
+duplication on hover, removed at 0, localised strings), which events trigger a refresh,
+and error handling.
+
+What the mocks can't prove — how the badge and tooltip actually render, and whether the
+game resets the tooltip — is covered by the in-game checklist below.
 
 ### Build and install
 
