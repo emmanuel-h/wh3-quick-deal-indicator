@@ -14,7 +14,7 @@
 -- player's turn and when diplomacy closes, and are spread over UI ticks (one faction
 -- per tick) so they never freeze a frame.
 
-local VERSION = "1.2.0"
+local VERSION = "1.3.0"
 local LOG_PREFIX = "[QDI] "
 local DIPLOMACY_PANEL = "diplomacy_dropdown"
 local MIN_SCORE = 0
