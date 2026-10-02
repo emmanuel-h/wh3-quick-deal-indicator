@@ -6,7 +6,8 @@ the AI would accept — i.e. a *Deal chance* **≥ 0** in the diplomacy screen's
 Known Factions list. Hovering the badge lights it up and lists each faction, deal type
 and chance;
 clicking it opens diplomacy directly on the Quick Deal view, on the first deal type that
-has an acceptable deal. The count is kept up to date as you play.
+has an acceptable deal. The count is updated at the start of your turn and when you
+close diplomacy.
 
 ## Status
 
@@ -23,8 +24,9 @@ Several development builds crashed the game; see [Known crashes](#known-crashes)
    copy it into `<Steam>/steamapps/common/Total War WARHAMMER III/data/`.
 2. Enable it in the game launcher's mod manager.
 
-The mod only reads game state and changes your own HUD, so it is save-game compatible
-and multiplayer safe.
+The mod only reads game state and changes your own HUD, so it is save-game compatible.
+Multiplayer hasn't been tested: the mod works the same there, scanning only at turn
+start and when diplomacy closes.
 
 ## How it works
 
@@ -62,12 +64,20 @@ score is ≥ 0.
 - when the campaign is loaded,
 - at the start of the local player's turn (`ScriptEventHumanFactionTurnStart`, filtered
   on `cm:get_local_faction_name(true)` so each multiplayer client only handles itself),
-- during the local player's turn (`cm:is_local_players_turn(true)`), after anything that
-  can change a deal's chance: `CharacterFinishedMovingEvent`, `BattleCompleted`,
-  `GarrisonOccupiedEvent`, `RegionFactionChangeEvent`, `PositiveDiplomaticEvent`,
-  `NegativeDiplomaticEvent`, and any panel closing (`PanelClosedCampaign`, diplomacy
-  included). These refreshes run 250 ms after the event through a real (UI) timer, and
-  events arriving together produce a single scan. Events during AI turns are ignored.
+- when diplomacy closes during the local player's turn (`PanelClosedCampaign` with
+  `diplomacy_dropdown`, `cm:is_local_players_turn(true)`), 250 ms after the event through
+  a real (UI) timer.
+
+Nothing else triggers a scan. Each scan runs one AI evaluation per deal type and faction
+met, which players felt as lag spikes: version 1.2.0 also rescanned after army moves,
+battles, settlements changing hands, diplomatic events and *any* panel closing — and
+clicking almost anything in the campaign opens or closes a panel. The badge click
+doesn't rescan either: it uses the last scan's result.
+
+A scan is also spread over UI ticks: the faction list is read first, then one faction is
+evaluated per tick (chained 1 ms single-shot real timers), and the badge is updated once
+the last one is done. A faction that died or disappeared meanwhile is skipped. A refresh
+arriving during a scan starts it over, so the badge shows the latest state.
 
 ### HUD
 
@@ -98,7 +108,7 @@ score is ≥ 0.
   `factions_screen_name_*` and `diplomacy_quick_deal_offers_localised_quick_deal_title_*`)
   so it follows the game language (English, French, …) without shipping a `.loc` file.
 - **Click** — the badge is interactive, so it catches clicks on that corner of the
-  button. On `ComponentLClickUp` the mod rescans and notes the first deal type (in the
+  button. On `ComponentLClickUp` the mod takes, from the last scan, the first deal type (in the
   screen's button order: non-aggression pact, trade agreement, military access,
   defensive alliance, military alliance, peace, then vassal / tributary / confederation)
   that has a deal ≥ 0. Then:
@@ -268,12 +278,14 @@ python -m unittest discover -s tests -v
 calling any `cm`, `core` or `common` function that isn't faked fails the test, which
 guards against the mod accidentally using an API that changes the game state. The suite
 checks that both scripts compile, the ≥ 0 rule, `can_issue` and dead-faction filtering,
-the badge (count, shows 0, created once, placement, layout), the badge
+the badge (count, shows 0, created once, placement, layout), scans spread one faction
+per tick (restarted by a newer refresh, factions gone mid-scan skipped), the badge
 tooltip (content, order, localised strings), the click flow (Quick Deal pressed once,
 never toggled off, request expiry, manual openings untouched, first deal type in screen
 order, matching by id, game button tooltips never read, unknown buttons left alone), that
-the vanilla button's tooltip is never touched, which events trigger a refresh (only on the local player's
-turn, grouped), and error handling. GitHub Actions runs the suite and a pack build on every push
+the vanilla button's tooltip is never touched, which events trigger a refresh (turn start and
+diplomacy close only, on the local player's turn, grouped; no scan on other panels, game
+events or badge clicks), and error handling. GitHub Actions runs the suite and a pack build on every push
 (`.github/workflows/tests.yml`).
 
 What the mocks can't prove — how the badge renders, whether the game delivers the click
@@ -347,13 +359,13 @@ create the debug file, then:
    Repeat with other panels open first (a settlement, an army's units, recruitment,
    technologies), and check the `heartbeat` lines keep coming afterwards. Clicking the diplomacy button outside the badge opens
    diplomacy normally.
-5. **Live refresh** — move an army, win a battle, or open and close any panel: the log
-   shows `event <name>: refresh scheduled` (or why it was skipped), then a
-   `refresh (<name>)` block, and the badge follows.
+5. **No lag** — click armies, settlements and buildings, open and close panels, move
+   armies: no stutter, and no `refresh (...)` block in the log.
 6. **Stability** — play normally for at least 10 minutes: hover the diplomacy button,
    click armies and settlements, open and close panels. No crash.
 7. **Refresh on close** — sign one of the listed deals, close diplomacy: the badge
-   updates (`refresh (diplomacy closed)` in the log).
+   updates (`event diplomacy closed: refresh scheduled`, then
+   `refresh (diplomacy closed)` in the log).
 8. **Turn start** — end the turn: a `refresh (turn start)` block appears, and nothing
    flashes on screen.
 9. **Zero case** — with no deal ≥ 0, the badge shows 0; its tooltip is just the

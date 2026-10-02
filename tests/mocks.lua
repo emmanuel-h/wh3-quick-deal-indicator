@@ -19,6 +19,7 @@ mock = {
 	loc = {},        -- key -> localised string
 	ui_ready = true, -- false: find_uicomponent finds nothing
 	my_turn = true,  -- cm:is_local_players_turn()
+	evaluations = 0, -- calls to cm:cai_evaluate_quick_deal_action
 }
 
 local function strict(name, t)
@@ -200,7 +201,13 @@ cm = strict("cm", {
 		assert(force == true, "get_local_faction_name must be forced (multiplayer)")
 		return mock.local_faction
 	end,
-	get_faction = function(_, name) return faction_interface(name) end,
+	-- Like the game: false for a faction that doesn't exist.
+	get_faction = function(_, name)
+		if name ~= mock.local_faction and not mock.factions[name] then
+			return false
+		end
+		return faction_interface(name)
+	end,
 	is_multiplayer = function() return mock.multiplayer end,
 	is_local_players_turn = function(_, force)
 		assert(force == true, "is_local_players_turn must be forced (multiplayer)")
@@ -208,6 +215,7 @@ cm = strict("cm", {
 	end,
 	cai_evaluate_quick_deal_action = function(_, me, other, option)
 		assert(me:name() == mock.local_faction, "evaluated for a non-local faction")
+		mock.evaluations = mock.evaluations + 1
 		local entry = mock.factions[other:name()].scores[option]
 		if not entry then
 			return 0, false

@@ -7,8 +7,12 @@
 -- by a ContextTooltipSetter callback, and doing so crashed the game (see README).
 -- The tooltip lives on our own badge component instead.
 --
--- Read-only: the mod only queries the model and changes the local player's HUD,
--- so it is safe in multiplayer.
+-- Read-only: the mod only queries the model and changes the local player's HUD.
+--
+-- Each scan asks the AI to evaluate every deal type with every faction met, which is
+-- slow enough to be felt. Scans run only on campaign load, at the start of the local
+-- player's turn and when diplomacy closes, and are spread over UI ticks (one faction
+-- per tick) so they never freeze a frame.
 
 local VERSION = "1.2.0"
 local LOG_PREFIX = "[QDI] "
@@ -39,17 +43,12 @@ local FLOW_TIMEOUT_MS = 10000
 -- real_callback runs a 0 ms callback immediately, inside the caller.
 local NEXT_UPDATE_MS = 1
 
--- Game events after which deals are re-checked (during the local player's turn),
--- in addition to turn start and any panel closing.
-local REFRESH_EVENTS = {
-	"CharacterFinishedMovingEvent",
-	"BattleCompleted",
-	"GarrisonOccupiedEvent",
-	"RegionFactionChangeEvent",
-	"PositiveDiplomaticEvent",
-	"NegativeDiplomaticEvent",
-}
+-- Delay of the refresh after diplomacy closes. Earlier versions also refreshed after
+-- army moves, battles, diplomatic events and any panel closing: clicking almost anything
+-- opens or closes a panel, and the scans made the game stutter (reported by players).
 local REFRESH_DELAY_MS = 250
+-- Factions evaluated per UI tick during a scan (each is one AI evaluation per deal type).
+local SCAN_FACTIONS_PER_TICK = 1
 
 -- All tooltip text comes from vanilla strings, so it follows the game language.
 local LOC_QUICK_DEAL = "uied_component_texts_localised_string_dy_province_owned_Text_3f0076"
@@ -61,6 +60,11 @@ local LOC_FACTION_PREFIX = "factions_screen_name_"
 local flow = nil
 -- A refresh is already scheduled.
 local refresh_pending = false
+-- Scan in progress (nil when idle):
+-- { reason = string, names = { faction name, ... }, next = index, deals = {...}, faction_count = number }
+local scan_job = nil
+-- Deals found by the last finished scan (used by the badge click, which doesn't rescan).
+local last_deals = {}
 
 -- Every Quick Deal offer (vanilla diplomacy_quick_deal_offers table), in the
 -- order of the buttons under the Known Factions list. Options a faction can't
@@ -115,38 +119,43 @@ local function local_faction()
 	return cm:get_faction(cm:get_local_faction_name(true))
 end
 
---- Returns the deals the AI would accept, sorted by faction then best score:
--- { { faction = FACTION_SCRIPT_INTERFACE, option = string, score = number }, ... }
--- and the number of distinct factions in that list.
-local function scan()
-	local me = local_faction()
-	local deals = {}
-	local faction_count = 0
+--- Names of the factions met by the local player, to scan one per tick. Names, not
+-- interfaces: each is looked up again when its turn comes.
+local function met_faction_names()
+	local names = {}
+	for _, other in model_pairs(local_faction():factions_met()) do
+		table.insert(names, other:name())
+	end
+	return names
+end
 
-	for _, other in model_pairs(me:factions_met()) do
-		if not other:is_dead() then
-			local found = false
-			for _, option in ipairs(OPTIONS) do
-				local score, can_issue = cm:cai_evaluate_quick_deal_action(me, other, option)
-				if can_issue and score >= MIN_SCORE then
-					table.insert(deals, { faction = other, option = option, score = score })
-					found = true
-				end
-			end
-			if found then
-				faction_count = faction_count + 1
-			end
+--- Adds to `deals` every deal the AI would accept from the faction `name`:
+-- { faction = string, option = string, score = number }. Returns true if there is one.
+local function scan_faction(name, deals)
+	local other = cm:get_faction(name)
+	if not other or other:is_dead() then
+		return false
+	end
+	local me = local_faction()
+	local found = false
+	for _, option in ipairs(OPTIONS) do
+		local score, can_issue = cm:cai_evaluate_quick_deal_action(me, other, option)
+		if can_issue and score >= MIN_SCORE then
+			table.insert(deals, { faction = name, option = option, score = score })
+			found = true
 		end
 	end
+	return found
+end
 
+--- Sorts deals by faction, then best score.
+local function sort_deals(deals)
 	table.sort(deals, function(a, b)
-		if a.faction:name() ~= b.faction:name() then
-			return a.faction:name() < b.faction:name()
+		if a.faction ~= b.faction then
+			return a.faction < b.faction
 		end
 		return a.score > b.score
 	end)
-
-	return deals, faction_count
 end
 
 local function diplomacy_button()
@@ -158,7 +167,7 @@ local function build_tooltip(deals)
 	local lines = {}
 	for _, deal in ipairs(deals) do
 		table.insert(lines, string.format("%s - %s (%.1f)",
-			common.get_localised_string(LOC_FACTION_PREFIX .. deal.faction:name()),
+			common.get_localised_string(LOC_FACTION_PREFIX .. deal.faction),
 			common.get_localised_string(LOC_OPTION_PREFIX .. deal.option),
 			deal.score))
 	end
@@ -303,11 +312,13 @@ local function schedule_poll(this_flow)
 end
 
 --- Badge click: open diplomacy, then the Quick Deal view, then the deal type.
+-- The deal type comes from the last scan (the one the badge shows): rescanning here
+-- would freeze the game on every click.
 -- The diplomacy click runs on the next UI tick (never inside the badge's UI event);
 -- the checks start once that click has returned and wait for each panel/button to
 -- exist, whatever the machine's speed.
 local function start_click_flow()
-	local option = first_available_option((scan()))
+	local option = first_available_option(last_deals)
 	log("badge clicked, first deal type: " .. tostring(option))
 	if flow then
 		stop_flow("superseded by a newer click")
@@ -329,33 +340,79 @@ local function start_click_flow()
 	end, NEXT_UPDATE_MS)
 end
 
+--- Last step of a scan: logs the deals and shows them on the badge.
+local function finish_scan(job)
+	sort_deals(job.deals)
+	last_deals = job.deals
+	log(string.format("refresh (%s): %d deal(s) with %d faction(s)", job.reason, #job.deals, job.faction_count))
+	for _, deal in ipairs(job.deals) do
+		log(string.format("  %s %s %.1f", deal.faction, deal.option, deal.score))
+	end
+
+	if not hud_enabled then
+		return
+	end
+	local button = diplomacy_button()
+	if not button then
+		log("diplomacy button not found, HUD not updated")
+		return
+	end
+	update_badge(button, job.deals, job.faction_count)
+	log("badge updated")
+end
+
+--- One tick of a scan: evaluates the next faction(s). Returns true when there is more.
+local function scan_step(job)
+	for _ = 1, SCAN_FACTIONS_PER_TICK do
+		local name = job.names[job.next]
+		if not name then
+			finish_scan(job)
+			return false
+		end
+		job.next = job.next + 1
+		if scan_faction(name, job.deals) then
+			job.faction_count = job.faction_count + 1
+		end
+	end
+	return true
+end
+
+--- Runs `job` one step per UI tick with chained single-shot timers (as the click flow).
+local function schedule_scan_step(job)
+	cm:real_callback(function()
+		if scan_job ~= job then
+			return  -- replaced by a newer scan
+		end
+		local ok, more = pcall(scan_step, job)
+		if not ok then
+			log("ERROR during refresh: " .. tostring(more))
+			scan_job = nil
+		elseif more then
+			schedule_scan_step(job)
+		else
+			scan_job = nil
+		end
+	end, NEXT_UPDATE_MS)
+end
+
+--- Starts a scan; one already running is dropped and started over, so the badge
+-- always ends up showing the state after the latest event.
 local function refresh(reason)
 	local ok, err = pcall(function()
-		local deals, faction_count = scan()
-		log(string.format("refresh (%s): %d deal(s) with %d faction(s)", reason, #deals, faction_count))
-		for _, deal in ipairs(deals) do
-			log(string.format("  %s %s %.1f", deal.faction:name(), deal.option, deal.score))
+		if scan_job then
+			log("scan (" .. scan_job.reason .. ") restarted for " .. reason)
 		end
-
-		if not hud_enabled then
-			return
-		end
-		local button = diplomacy_button()
-		if not button then
-			log("diplomacy button not found, HUD not updated")
-			return
-		end
-		update_badge(button, deals, faction_count)
-		log("badge updated")
+		scan_job = { reason = reason, names = met_faction_names(), next = 1, deals = {}, faction_count = 0 }
+		schedule_scan_step(scan_job)
 	end)
 	if not ok then
+		scan_job = nil
 		log("ERROR during refresh: " .. tostring(err))
 	end
 end
 
---- Refreshes shortly after a game event, during the local player's turn only.
--- Events arriving together (e.g. a battle ending and a region changing hands)
--- produce a single scan.
+--- Refreshes shortly after an event, during the local player's turn only. Events
+-- arriving together produce a single scan.
 local function schedule_refresh(reason)
 	if not cm:is_local_players_turn(true) then
 		log("event " .. reason .. ": not the local player's turn, skipped")
@@ -398,26 +455,15 @@ local function init()
 		true
 	)
 
-	-- Anything that can change a deal's chance: armies moving, battles, settlements
-	-- changing hands, diplomatic events, and closing any panel (diplomacy included).
-	for _, event in ipairs(REFRESH_EVENTS) do
-		core:add_listener(
-			"qdi_refresh_" .. event,
-			event,
-			true,
-			function()
-				schedule_refresh(event)
-			end,
-			true
-		)
-	end
-
+	-- Signing deals in diplomacy changes them.
 	core:add_listener(
-		"qdi_panel_closed",
+		"qdi_diplomacy_closed",
 		"PanelClosedCampaign",
-		true,
 		function(context)
-			schedule_refresh("panel closed: " .. tostring(context.string))
+			return context.string == DIPLOMACY_PANEL
+		end,
+		function()
+			schedule_refresh("diplomacy closed")
 		end,
 		true
 	)

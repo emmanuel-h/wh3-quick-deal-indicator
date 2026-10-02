@@ -69,9 +69,12 @@ class ModTestCase(unittest.TestCase):
         self.mock.factions = table
         self.mock.met = met
 
-    def load_mod(self):
+    def load_mod(self, settle=True):
+        """Loads the script; with `settle`, lets the load scan finish (it runs over ticks)."""
         self.lua.execute(f'dofile("{lua_path(MOD_SCRIPT)}")')
         self.mock.run_first_tick()
+        if settle:
+            self.mock.run_real_callbacks()
 
     def fire(self, lua_context_expr, event):
         self.lua.execute(f"mock.fire({event!r}, {lua_context_expr})")
@@ -79,6 +82,7 @@ class ModTestCase(unittest.TestCase):
     def turn_start(self, faction):
         self.fire(f'{{ faction = function() return {{ name = function() return "{faction}" end }} end }}',
                   "ScriptEventHumanFactionTurnStart")
+        self.mock.run_real_callbacks()
 
     def panel_closed(self, panel):
         """Closes a panel and lets the deferred refresh run."""
@@ -200,7 +204,7 @@ class BadgeTests(ModTestCase):
         self.set_factions({"jade": {TRADE: (1.0, True)}})
         self.load_mod()
         self.mock.diplomacy_button.x, self.mock.diplomacy_button.y = 1600, 900
-        self.panel_closed("technology_panel")
+        self.panel_closed("diplomacy_dropdown")
         badge = self.badge()
         self.assertEqual((badge.x, badge.y), (1600 + 36, 900 + 27))
 
@@ -208,7 +212,7 @@ class BadgeTests(ModTestCase):
         self.set_factions({"jade": {TRADE: (1.0, True)}})
         self.load_mod()
         self.mock.diplomacy_button.visible = False
-        self.panel_closed("technology_panel")
+        self.panel_closed("diplomacy_dropdown")
         self.assertIsNone(self.badge_count())
 
     def test_count_is_shown_on_the_count_child(self):
@@ -421,7 +425,7 @@ class BadgeClickTests(ModTestCase):
 
     def test_click_at_zero_opens_quick_deal_with_default_deal_type(self):
         self.set_factions({"jade": {TRADE: (-1.0, True)}})
-        self.panel_closed("technology_panel")
+        self.panel_closed("diplomacy_dropdown")
         self.assertEqual(self.badge_count(), "0")
         self.click()
         self.mock.run_real_callbacks()
@@ -468,49 +472,115 @@ class RefreshTests(ModTestCase):
         self.panel_closed("diplomacy_dropdown")
         self.assertEqual(self.badge_count(), "1")
 
-    def test_any_panel_closed_refreshes(self):
-        self.panel_closed("technology_panel")
-        self.assertEqual(self.badge_count(), "1")
+    def test_other_panels_closing_do_not_scan(self):
+        # Clicking almost anything opens/closes a panel; scanning each time made the game
+        # stutter (reported by players).
+        before = self.mock.evaluations
+        for panel in ("technology_panel", "units_panel", "settlement_panel", "character_details_panel"):
+            self.panel_closed(panel)
+        self.assertEqual(self.mock.evaluations, before)
+        self.assertEqual(self.badge_count(), "0")
 
-    def test_game_events_refresh(self):
+    def test_mid_turn_game_events_do_not_scan(self):
+        # Scans only at turn start and diplomacy close: mid-turn scans made the game
+        # stutter (reported by players).
+        before = self.mock.evaluations
         for event in ("CharacterFinishedMovingEvent", "BattleCompleted", "GarrisonOccupiedEvent",
                       "RegionFactionChangeEvent", "PositiveDiplomaticEvent", "NegativeDiplomaticEvent"):
-            with self.subTest(event=event):
-                self.set_factions({"jade": {TRADE: (-1.0, True)}})
-                self.game_event(event)
-                self.assertEqual(self.badge_count(), "0")
-                self.set_factions({"jade": {TRADE: (1.0, True)}})
-                self.game_event(event)
-                self.assertEqual(self.badge_count(), "1")
+            self.game_event(event)
+        self.assertEqual(self.mock.evaluations, before)
+        self.assertEqual(self.badge_count(), "0")
+
+    def test_multiplayer_behaves_the_same(self):
+        self.mock.multiplayer = True
+        self.turn_start("player")
+        self.assertEqual(self.badge_count(), "1")
 
     def test_no_refresh_outside_local_players_turn(self):
         self.mock.my_turn = False
-        self.game_event("BattleCompleted")
         self.panel_closed("diplomacy_dropdown")
         self.assertEqual(self.badge_count(), "0")
 
     def test_events_close_together_give_a_single_scan(self):
         before = self.refresh_count()
-        self.fire("{}", "BattleCompleted")
-        self.fire("{}", "RegionFactionChangeEvent")
+        self.fire('{ string = "diplomacy_dropdown" }', "PanelClosedCampaign")
         self.fire('{ string = "diplomacy_dropdown" }', "PanelClosedCampaign")
         self.mock.run_real_callbacks()
         self.assertEqual(self.refresh_count() - before, 1)
 
     def test_events_are_logged_with_their_outcome(self):
-        self.fire("{}", "BattleCompleted")
-        self.fire("{}", "RegionFactionChangeEvent")
+        self.fire('{ string = "diplomacy_dropdown" }', "PanelClosedCampaign")
+        self.fire('{ string = "diplomacy_dropdown" }', "PanelClosedCampaign")
         self.mock.run_real_callbacks()
         self.mock.my_turn = False
-        self.fire("{}", "CharacterFinishedMovingEvent")
+        self.fire('{ string = "diplomacy_dropdown" }', "PanelClosedCampaign")
         logs = self.logs()
-        self.assertIn("[QDI] event BattleCompleted: refresh scheduled", logs)
-        self.assertIn("[QDI] event RegionFactionChangeEvent: refresh already scheduled", logs)
-        self.assertIn("[QDI] refresh (BattleCompleted): 1 deal(s) with 1 faction(s)", logs)
-        self.assertIn("[QDI] event CharacterFinishedMovingEvent: not the local player's turn, skipped", logs)
+        self.assertEqual(logs.count("[QDI] event diplomacy closed: refresh scheduled"), 1)
+        self.assertIn("[QDI] event diplomacy closed: refresh already scheduled", logs)
+        self.assertIn("[QDI] refresh (diplomacy closed): 1 deal(s) with 1 faction(s)", logs)
+        self.assertIn("[QDI] event diplomacy closed: not the local player's turn, skipped", logs)
 
     def refresh_count(self):
         return sum(1 for line in self.logs() if line.startswith("[QDI] refresh ("))
+
+
+class ScanSchedulingTests(ModTestCase):
+    """Scans are spread over UI ticks so they never freeze a frame."""
+
+    def setUp(self):
+        super().setUp()
+        self.set_factions({
+            "jade": {TRADE: (1.0, True)},
+            "custodians": {NAP: (1.0, True)},
+            "nomads": {PEACE: (1.0, True)},
+        })
+
+    def run_one_tick(self):
+        """Fires the pending next-tick (1 ms) callbacks once."""
+        pending = [cb for cb in self.mock.real_callbacks.values() if cb.ms == 1]
+        self.mock.real_callbacks = self.lua.table_from(
+            [cb for cb in self.mock.real_callbacks.values() if cb.ms != 1])
+        for cb in pending:
+            cb.f()
+
+    def test_one_faction_per_tick(self):
+        self.load_mod(settle=False)
+        self.assertEqual(self.mock.evaluations, 0, "nothing evaluated inside the event")
+        for faction_index in range(1, 4):
+            self.run_one_tick()
+            self.assertEqual(self.mock.evaluations, 9 * faction_index)
+            self.assertIsNone(self.badge_count(), "badge only updated once the scan is done")
+        self.run_one_tick()
+        self.assertEqual(self.badge_count(), "3")
+        self.assertEqual(list(self.mock.real_callbacks.values()), [], "scan chain stopped")
+        self.assertNoErrors()
+
+    def test_new_refresh_restarts_a_running_scan(self):
+        self.load_mod(settle=False)
+        self.run_one_tick()
+        self.set_factions({"jade": {TRADE: (1.0, True)}})
+        self.turn_start("player")
+        self.assertEqual([line for line in self.logs() if line.startswith("[QDI] refresh (")],
+                         ["[QDI] refresh (turn start): 1 deal(s) with 1 faction(s)"])
+        self.assertIn("[QDI] scan (campaign loaded) restarted for turn start", self.logs())
+        self.assertEqual(self.badge_count(), "1")
+
+    def test_faction_dead_or_gone_mid_scan_is_skipped(self):
+        self.load_mod(settle=False)
+        self.run_one_tick()  # jade
+        self.mock.factions.custodians.dead = True
+        self.lua.execute("mock.factions.nomads = nil")
+        self.mock.run_real_callbacks()
+        self.assertEqual(self.badge_count(), "1")
+        self.assertNoErrors()
+
+    def test_badge_click_does_not_scan(self):
+        self.load_mod()
+        before = self.mock.evaluations
+        self.click()
+        self.mock.run_real_callbacks()
+        self.assertEqual(self.mock.evaluations, before)
+        self.assertIn("[QDI] badge clicked, first deal type: " + NAP, self.logs())
 
 
 class DealTypeSelectionTests(ModTestCase):
